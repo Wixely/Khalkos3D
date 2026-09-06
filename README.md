@@ -41,8 +41,22 @@ wherever there is already one.
 ```csharp
 // The renderer is handed a proc-address function and draws into whatever framebuffer is bound.
 var renderer = GlRenderer.Create(getProcAddress, out var error);
-renderer?.Draw(scene, Camera.Frame(scene.Bounds, scene.Up), width, height);
+
+var view = new OrbitController();
+view.Frame(scene, aspect: (float)width / height);   // takes the up axis from the file
+renderer?.Draw(scene, view.Camera, width, height);
+
+// Drags, pans and wheel ticks are fractions of the viewport, so a gesture feels the same on a
+// phone and on a 4K monitor.
+view.Orbit(dx / width, dy / height);
+view.Zoom(wheelTicks);
 ```
+
+Plus the scenery a viewer needs — a ground grid, a printer build plate and an RGB axis marker — and
+the debug views that make a bad mesh obvious: wireframe, normals, and **backface highlighting**,
+which matters because the shader deliberately flips normals towards the viewer so an inverted facet
+does not appear as a black hole in a part your slicer would print fine. That kindness hides the
+defect; this is how you see it.
 
 ```csharp
 // Every format, one type, and the caller never learns which parser ran.

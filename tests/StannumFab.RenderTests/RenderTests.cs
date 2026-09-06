@@ -177,6 +177,59 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
         Assert.True(wire < solid * 0.5f, $"wireframe covered {wire:P1} against solid {solid:P1} — it is not edges");
     }
 
+    [Fact]
+    public void An_unlit_material_shows_its_colour_exactly()
+    {
+        // The point of unlit: what goes in comes out. No lamp, no tone mapping, no gamma — because a
+        // grid line's colour is a colour rather than a luminance to be compressed, and a shaded grid
+        // is dim on one side of the model and bright on the other.
+        var unlit = new Material { BaseColor = new Vector4(0.9f, 0.05f, 0.05f, 1f), Unlit = true };
+        var centre = Render(Box(new Vector3(10, 10, 10), unlit)).At(Size / 2, Size / 2);
+
+        Assert.InRange(centre.R, 227, 233);
+        Assert.InRange(centre.G, 10, 16);
+        Assert.InRange(centre.B, 10, 16);
+    }
+
+    [Fact]
+    public void A_grid_renders_as_lines_in_its_own_colours()
+    {
+        // Scenery goes through the same upload, cache and draw call as a model — there is no private
+        // "draw the grid" path to drift from the one that draws everything else.
+        var grid = Shapes.Grid(50f, 10f, UpAxis.Z);
+        var scene = Scene.FromMesh(grid, Shapes.LineMaterial, up: UpAxis.Z);
+        var frame = Render(scene);
+
+        Assert.True(frame.LitFraction > 0.005f, "the grid drew nothing");
+        // Thin lines over a wide plane: a solid would cover far more.
+        Assert.True(frame.LitFraction < 0.4f, $"the grid covered {frame.LitFraction:P0}, which is not lines");
+        // Two line colours went in — minor and major — so more than one must come out.
+        Assert.True(frame.DistinctColors > 1, "every grid line came out the same colour");
+    }
+
+    [Fact]
+    public void Backfaces_are_highlighted_so_an_inverted_facet_can_be_found()
+    {
+        // The counterpart to the shader flipping normals towards the viewer. That flip is what stops
+        // an inverted facet appearing as a black hole in a part the slicer would print fine — and it
+        // also HIDES the inversion, so this is the switch that shows it.
+        var corners = TestBox.Corners(new Vector3(10, 10, 10));
+        for (var i = 0; i + 2 < corners.Length; i += 3)
+            (corners[i + 1], corners[i + 2]) = (corners[i + 2], corners[i + 1]);
+        var inverted = Scene.FromMesh(MeshWelder.FromTriangleSoup(corners, out _), Red, up: UpAxis.Z);
+        var healthy = Box(new Vector3(10, 10, 10), Red);
+
+        var debug = new RenderSettings { ClearColor = Backdrop, HighlightBackfaces = true };
+        var flagged = Render(inverted, settings: debug).At(Size / 2, Size / 2);
+        var fine = Render(healthy, settings: debug).At(Size / 2, Size / 2);
+
+        // Magenta, which nothing in a real material is.
+        Assert.True(flagged.R > 200 && flagged.G < 60 && flagged.B > 180,
+            $"an inverted box was not flagged: {flagged}");
+        Assert.False(fine.R > 200 && fine.G < 60 && fine.B > 180,
+            $"a correctly wound box was flagged as inverted: {fine}");
+    }
+
     // ---- resource handling ------------------------------------------------------------------
 
     [Fact]

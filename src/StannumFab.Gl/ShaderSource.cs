@@ -73,12 +73,37 @@ internal static class ShaderSource
         uniform int   uAlphaMode;      // 0 opaque, 1 mask, 2 blend
         uniform float uAlphaCutoff;
         uniform int   uShowNormals;
+        uniform int   uUnlit;
+        uniform int   uHighlightBackfaces;
+        uniform vec3  uBackfaceColor;
 
         out vec4 fragColor;
 
         const float PI = 3.14159265359;
 
         void main() {
+            vec4 base = uBaseColor;
+            if (uHasTex == 1) base *= texture(uTex, vUv);
+            if (uHasVertexColor == 1) base *= vColor;
+
+            if (uAlphaMode == 1 && base.a < uAlphaCutoff) discard;
+
+            // Scenery — a grid, a build plate, an axis marker — has no meaningful normal, so lighting
+            // it makes lines dim on one side of the model and bright on the other. Straight out, no
+            // tone mapping: an unlit colour is a colour, not a luminance to be compressed.
+            if (uUnlit == 1) {
+                fragColor = base;
+                return;
+            }
+
+            // Read BEFORE the normal is flipped, because the flip is exactly what hides this: a
+            // facet wound the wrong way would otherwise shade like its neighbours. gl_FrontFacing is
+            // the winding as rasterised, which is the fact a user needs in order to fix their mesh.
+            if (uHighlightBackfaces == 1 && !gl_FrontFacing) {
+                fragColor = vec4(uBackfaceColor, 1.0);
+                return;
+            }
+
             vec3 N = normalize(vNormal);
 
             // Two-sided shading, and it is not optional for this engine's first use case: real STL
@@ -92,12 +117,6 @@ internal static class ShaderSource
                 fragColor = vec4(N * 0.5 + 0.5, 1.0);
                 return;
             }
-
-            vec4 base = uBaseColor;
-            if (uHasTex == 1) base *= texture(uTex, vUv);
-            if (uHasVertexColor == 1) base *= vColor;
-
-            if (uAlphaMode == 1 && base.a < uAlphaCutoff) discard;
 
             vec3 albedo = base.rgb;
             vec3 L = normalize(-uLightDir);

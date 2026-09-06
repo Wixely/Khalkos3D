@@ -43,6 +43,20 @@ public readonly record struct RenderSettings
     /// inverted facet obvious, which on a printable mesh is the defect that matters most.</summary>
     public bool ShowNormals { get; init; }
 
+    /// <summary>
+    /// Paint back-facing triangles in a warning colour.
+    ///
+    /// <para><b>The counterpart to the shader flipping normals towards the viewer.</b> That flip is
+    /// what stops an inverted facet appearing as a black hole in a part the slicer would print
+    /// perfectly well — but it also HIDES the inversion, so a user who wants to fix their mesh has no
+    /// way to see it. This is that way: with it on, anything wound the wrong way lights up.</para>
+    /// </summary>
+    public bool HighlightBackfaces { get; init; }
+
+    /// <summary>The colour <see cref="HighlightBackfaces"/> uses. Magenta by default because nothing
+    /// in a real material is that colour, so it cannot be mistaken for the model.</summary>
+    public Vector3 BackfaceColor { get; init; } = new(1f, 0f, 0.85f);
+
     /// <summary>Create the defaults.</summary>
     public RenderSettings() { }
 }

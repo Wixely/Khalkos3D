@@ -138,6 +138,37 @@ public readonly record struct Camera(
         return this with { Position = Target + rotated };
     }
 
+    /// <summary>
+    /// Slide the view sideways and up, taking the target with it.
+    ///
+    /// <para><b>Scaled by DISTANCE, which is the whole trick.</b> A pan of a fixed number of world
+    /// units feels wild when zoomed out and useless when zoomed in; scaling by how far away the target
+    /// is means a drag moves the model by the same fraction of the screen whatever the zoom. That is
+    /// what makes panning feel like dragging the object rather than nudging a camera.</para>
+    /// </summary>
+    /// <param name="dx">Fraction of the viewport to slide right.</param>
+    /// <param name="dy">Fraction of the viewport to slide up.</param>
+    public Camera Pan(float dx, float dy)
+    {
+        var forward = Target - Position;
+        var distance = forward.Length();
+        if (distance < 1e-6f) return this;
+        forward /= distance;
+
+        var right = Vector3.Cross(forward, Up);
+        var length = right.Length();
+        if (length < 1e-6f) return this;      // looking straight along up; nothing to slide along
+        right /= length;
+        var up = Vector3.Cross(right, forward);
+
+        // The visible height at the target's distance. Matching it means a drag of the full viewport
+        // moves the model exactly one screen.
+        var extent = 2f * distance * MathF.Tan(FieldOfView * 0.5f);
+        var shift = right * (-dx * extent) + up * (dy * extent);
+
+        return this with { Position = Position + shift, Target = Target + shift };
+    }
+
     /// <summary>This camera moved towards or away from its target. <paramref name="factor"/> below 1
     /// moves closer. The clip planes follow, so precision does not decay as the view closes in.</summary>
     public Camera Zoom(float factor)

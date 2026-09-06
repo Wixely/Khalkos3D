@@ -140,6 +140,8 @@ public sealed unsafe class GlRenderer : IDisposable
         SetVector3(_u.LightColor, settings.LightColor);
         SetVector3(_u.Ambient, settings.Ambient);
         gl.Uniform1i(_u.ShowNormals, settings.ShowNormals ? 1 : 0);
+        gl.Uniform1i(_u.HighlightBackfaces, settings.HighlightBackfaces ? 1 : 0);
+        SetVector3(_u.BackfaceColor, settings.BackfaceColor);
         gl.Uniform1i(_u.Tex, 0);
 
         // Opaque first, then transparent back to front. Sorting only the transparent half is the
@@ -202,6 +204,7 @@ public sealed unsafe class GlRenderer : IDisposable
             _ => 0,
         });
         gl.Uniform1i(_u.HasVertexColor, gpu.HasColor ? 1 : 0);
+        gl.Uniform1i(_u.Unlit, material.Unlit ? 1 : 0);
 
         gl.ActiveTexture(GlApi.TEXTURE0);
         // Always bound, even with no texture: sampling a one-pixel white image costs nothing and
@@ -210,7 +213,12 @@ public sealed unsafe class GlRenderer : IDisposable
         gl.BindTexture(GlApi.TEXTURE_2D, texture != 0 ? texture : White());
         gl.Uniform1i(_u.HasTex, texture != 0 ? 1 : 0);
 
-        if (material.DoubleSided || settings.Wireframe) gl.Disable(GlApi.CULL_FACE);
+        // Culling is skipped whenever a back face is something we want to SEE: a double-sided
+        // material, a wireframe, or the debug view whose entire purpose is to show them. Leaving
+        // culling on with HighlightBackfaces would produce a view that reported no problems because
+        // it had thrown away the evidence.
+        if (material.DoubleSided || settings.Wireframe || settings.HighlightBackfaces)
+            gl.Disable(GlApi.CULL_FACE);
         else { gl.Enable(GlApi.CULL_FACE); gl.CullFace(GlApi.BACK); }
 
         gl.BindVertexArray(gpu.Vao);
@@ -467,6 +475,7 @@ public sealed unsafe class GlRenderer : IDisposable
         internal readonly int Mvp, Model, NormalMatrix, CamPos, LightDir, LightColor, Ambient;
         internal readonly int BaseColor, Metallic, Roughness, Emissive, Tex, HasTex;
         internal readonly int HasVertexColor, AlphaMode, AlphaCutoff, ShowNormals;
+        internal readonly int Unlit, HighlightBackfaces, BackfaceColor;
 
         internal Uniforms(GlApi gl, uint program)
         {
@@ -487,6 +496,9 @@ public sealed unsafe class GlRenderer : IDisposable
             AlphaMode = Find(gl, program, "uAlphaMode");
             AlphaCutoff = Find(gl, program, "uAlphaCutoff");
             ShowNormals = Find(gl, program, "uShowNormals");
+            Unlit = Find(gl, program, "uUnlit");
+            HighlightBackfaces = Find(gl, program, "uHighlightBackfaces");
+            BackfaceColor = Find(gl, program, "uBackfaceColor");
         }
 
         private static int Find(GlApi gl, uint program, string name)

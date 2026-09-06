@@ -129,11 +129,31 @@ driver that rounds differently, which across six targets means failing for reaso
 defects. It needs a tolerance calibrated against more than one driver, so it waits until there is more
 than one to calibrate against.
 
-### M2 · Viewer essentials — **1 week**
+### M2 · Viewer essentials — **done**
 
-Orbit / pan / zoom camera with a fit-to-bounds default, a build plate and grid, and the debug views
-that make a bad model obvious: wireframe, normals, backface highlight. Camera and input state live in
-`Core`; nothing here touches a window.
+`OrbitController` (orbit, pan, zoom, resize, reset), `Shapes` (ground grid, printer build plate,
+RGB axis marker), `Material.Unlit`, and `RenderSettings.HighlightBackfaces`. All in `Core` except the
+two shader branches; nothing touches a window.
+
+Three things here are less obvious than they look:
+
+- **The controller takes deltas as a FRACTION OF THE VIEWPORT, not pixels.** A drag across half the
+  window rotates by the same amount on a phone and on a 4K monitor, which is what makes the feel
+  identical across the six targets. Pixel deltas would spin a phone twice as far for the same gesture.
+- **Panning is scaled by distance**, so a drag moves the model by the same fraction of the screen at
+  any zoom. Unscaled, the same gesture is wild when zoomed out and useless up close.
+- **A resize only re-frames when the viewport got NARROWER.** Widening cannot newly clip anything, so
+  re-framing on every resize would throw away a view the user set up each time they dragged a window
+  edge.
+
+Scenery is ordinary meshes — `PrimitiveKind.Lines` with an unlit material — travelling the same
+upload, cache and draw call as a model. A renderer with a private "draw the grid" path would need
+that path on every future backend and would drift from the one that draws everything else.
+
+**`HighlightBackfaces` exists because the renderer's own kindness hides a defect.** The shader flips
+normals towards the viewer so an inverted facet shades like its neighbours rather than appearing as a
+black hole in a part the slicer would print fine — which is right, and which also means a user who
+wants to FIX their mesh cannot see the problem. This is how they see it.
 
 ### M3 · Printing — **1–2 weeks**
 

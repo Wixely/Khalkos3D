@@ -78,6 +78,15 @@ public sealed class Material
     /// </summary>
     public bool DoubleSided { get; init; } = true;
 
+    /// <summary>
+    /// Skip lighting entirely and show the base colour as it is.
+    ///
+    /// <para>For scenery rather than surfaces: a grid, a build plate, an axis marker, later a
+    /// toolpath. Shading a grid line makes it dim on one side of the model and bright on the other,
+    /// which reads as a rendering fault because a line has no meaningful normal to be lit by.</para>
+    /// </summary>
+    public bool Unlit { get; init; }
+
     /// <summary>True when this material needs to be drawn after the opaque pass.</summary>
     public bool IsTransparent => Alpha == AlphaMode.Blend || BaseColor.W < 1f;
 }
