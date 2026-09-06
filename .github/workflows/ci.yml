@@ -199,3 +199,76 @@ jobs:
             exit 1
           fi
           echo "ok: the asset layer links for browser-wasm"
+
+  pack:
+    name: The libraries pack, and carry what they promise
+    runs-on: ubuntu-latest
+    # Everything green first. A tag that publishes before the render gate has drawn a frame is a
+    # package nobody has watched work.
+    needs: [test, render, dependencies, wasm]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # PACKED ON EVERY RUN, PUBLISHED ONLY FROM A TAG, and the split is the whole point. CupriFace
+      # learned this the expensive way: a fully green release shipped a package with none of the
+      # natives it advertised, because nothing packed until the tag had already been cut. A pack
+      # step that only ever runs during a release is a pack step first tested during a release.
+      - name: Pack
+        run: |
+          set -euo pipefail
+          # Tag v0.1.0 means package 0.1.0. Off a tag it is a throwaway version: the point is that
+          # packing ran at all, not what it produced.
+          VERSION="0.0.0-ci"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          echo "packing $VERSION"
+          for proj in src/Khalkos3D.Core src/Khalkos3D.Formats src/Khalkos3D.Gl; do
+            dotnet pack "$proj" -c Release -p:Version="$VERSION" -o dist
+          done
+          ls -l dist
+
+      # The same shape of assertion the dependencies job makes, for the same reason: a claim that
+      # lives only in a props file is a claim that can stop being true without anything failing.
+      # LICENSE and PACKAGE.md are attached by an ItemGroup in src/Directory.Build.props that is
+      # conditioned on IsPackable, and an MIT library whose package carries no licence file is a
+      # licensing problem rather than a cosmetic one.
+      - name: The packages carry their licence and readme
+        run: |
+          set -euo pipefail
+          fail=0
+          for pkg in dist/*.nupkg; do
+            listing=$(unzip -l "$pkg")
+            echo "--- $(basename "$pkg") ---"
+            echo "$listing" | awk 'NF>3 {print $4}' | grep -v '^Name$' || true
+            for required in LICENSE PACKAGE.md; do
+              echo "$listing" | grep -qE "[[:space:]]$required$" \
+                || { echo "::error::$(basename "$pkg") packed without $required"; fail=1; }
+            done
+            # An empty lib/ would restore cleanly and then fail to resolve a single type.
+            echo "$listing" | grep -qE 'lib/net[0-9.]+/Khalkos3D\.[A-Za-z]+\.dll$' \
+              || { echo "::error::$(basename "$pkg") has no assembly under lib/"; fail=1; }
+          done
+          exit $fail
+
+      # Only from a tag. GitHub Packages is a real NuGet feed rather than a file attached to a
+      # release, so a consumer adds one source and gets `dotnet add package Khalkos3D.Core` with
+      # version resolution and restore.
+      #
+      # --skip-duplicate because GitHub Packages REFUSES to overwrite a published version: without
+      # it, re-running a tag fails on the first package every time.
+      - name: Publish to GitHub Packages
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet nuget push 'dist/*.nupkg' \
+            --source "https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json" \
+            --api-key "$GH_TOKEN" \
+            --skip-duplicate
+          echo "packages pushed to GitHub Packages for $GITHUB_REPOSITORY_OWNER"
