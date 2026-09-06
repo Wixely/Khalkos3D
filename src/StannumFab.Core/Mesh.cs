@@ -53,6 +53,11 @@ public sealed class Mesh
     /// quiet loss this engine is meant not to inflict.</summary>
     public Vector4[]? Colors { get; init; }
 
+    /// <summary>Tangent frame for normal mapping: xyz along the texture's U axis, w the handedness
+    /// that says whether the texture is mirrored here. Null unless a normal map needs it — see
+    /// <see cref="MeshTangents"/>.</summary>
+    public Vector4[]? Tangents { get; init; }
+
     /// <summary>What the indices describe.</summary>
     public PrimitiveKind Kind { get; init; } = PrimitiveKind.Triangles;
 
@@ -98,6 +103,8 @@ public sealed class Mesh
             return $"{t.Length} texture coordinates for {Positions.Length} vertices";
         if (Colors is { } c && c.Length != Positions.Length)
             return $"{c.Length} colours for {Positions.Length} vertices";
+        if (Tangents is { } g && g.Length != Positions.Length)
+            return $"{g.Length} tangents for {Positions.Length} vertices";
 
         return null;
     }

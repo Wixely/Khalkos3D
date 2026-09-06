@@ -20,14 +20,19 @@ public readonly record struct RenderSettings
     public Vector3 LightColor { get; init; } = new(2.6f, 2.6f, 2.6f);
 
     /// <summary>
-    /// A flat term standing in for image-based lighting.
-    ///
-    /// <para>Not physically anything, and it is here because the honest alternative is worse: with no
-    /// environment at all, a metal has nothing to reflect and renders black. A viewer showing a black
-    /// model looks broken rather than looks unlit. Replaced by a real prefiltered environment when
-    /// there is one.</para>
+    /// What the model is standing in. See <see cref="StannumFab.Environment"/> — without it a metal
+    /// has nothing to reflect and renders black, which reads as a broken shader rather than as an
+    /// empty room.
     /// </summary>
-    public Vector3 Ambient { get; init; } = new(0.16f, 0.17f, 0.19f);
+    public Environment Environment { get; init; } = Environment.Studio;
+
+    /// <summary>
+    /// Which axis is up, so the environment gradient runs the right way.
+    ///
+    /// <para>Set it from <see cref="Scene.Up"/>. A Z-up printed part lit by a Y-up gradient is lit
+    /// from the side, which looks like a lamp in the wrong place rather than like a wrong setting.</para>
+    /// </summary>
+    public UpAxis Up { get; init; } = UpAxis.Y;
 
     /// <summary>Clear the target to this colour before drawing, or null to draw over whatever is
     /// already there. Null by default: a host that composites this into its own frame has already

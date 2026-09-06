@@ -42,7 +42,8 @@ internal static class TestFiles
     /// <summary>A GLB holding one indexed triangle mesh, optionally declaring a required
     /// extension.</summary>
     internal static byte[] Glb(ReadOnlySpan<Vector3> positions, ReadOnlySpan<ushort> indices,
-                               string? requiredExtension = null, string? extraJson = null)
+                               string? requiredExtension = null, string? extraJson = null,
+                               string? topLevel = null, string? materials = null)
     {
         // Positions first, then indices, each aligned to 4 bytes as the specification wants.
         var positionBytes = positions.Length * 12;
@@ -78,7 +79,8 @@ internal static class TestFiles
               "min": [{{F(min.X)}},{{F(min.Y)}},{{F(min.Z)}}], "max": [{{F(max.X)}},{{F(max.Y)}},{{F(max.Z)}}] },
             { "bufferView": 1, "componentType": 5123, "count": {{indices.Length}}, "type": "SCALAR" }
           ],
-          "meshes": [ { "name": "test", "primitives": [ { "attributes": { "POSITION": 0 }, "indices": 1 } ] } ],
+          "meshes": [ { "name": "test", "primitives": [ { "attributes": { "POSITION": 0 }, "indices": 1{{materials}} } ] } ],
+        {{topLevel}}
           "nodes": [ { "mesh": 0{{extraJson}} } ],
           "scenes": [ { "nodes": [0] } ],
           "scene": 0

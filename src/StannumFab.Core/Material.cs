@@ -25,9 +25,9 @@ public enum AlphaMode
 /// back out lands somewhere useful. The alternative, a bespoke shading model, makes every importer
 /// and exporter a translation.</para>
 ///
-/// <para>Texture fields are indices into <see cref="Scene.Images"/> rather than image objects, so a
-/// scene stays serialisable, an image shared by four materials is stored once, and the renderer can
-/// upload each image exactly once.</para>
+/// <para>Texture fields are indices into <see cref="Scene.Textures"/> rather than objects, so a
+/// scene stays serialisable, a texture shared by four materials is stored once, and the renderer can
+/// upload each one exactly once.</para>
 /// </summary>
 public sealed class Material
 {
@@ -55,10 +55,11 @@ public sealed class Material
     /// material glow.</summary>
     public Vector3 Emissive { get; init; }
 
-    /// <summary>Index into <see cref="Scene.Images"/> for the base colour map, or null.</summary>
+    /// <summary>Index into <see cref="Scene.Textures"/> for the base colour map, or null.</summary>
     public int? BaseColorTexture { get; init; }
 
-    /// <summary>Index into <see cref="Scene.Images"/> for the tangent-space normal map, or null.</summary>
+    /// <summary>Index into <see cref="Scene.Textures"/> for the tangent-space normal map, or
+    /// null.</summary>
     public int? NormalTexture { get; init; }
 
     /// <summary>How alpha is interpreted.</summary>

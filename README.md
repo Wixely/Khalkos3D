@@ -58,6 +58,15 @@ which matters because the shader deliberately flips normals towards the viewer s
 does not appear as a black hole in a part your slicer would print fine. That kindness hides the
 defect; this is how you see it.
 
+### Materials look like materials
+
+Metallic-roughness PBR with textures, per-texture sampler state, normal maps (tangents derived when a
+file does not supply them), and an **environment** — because a metal has no diffuse colour at all, so
+with nothing to reflect it correctly renders near-black and every user reads that as a broken shader.
+
+The environment is a sky/horizon/ground gradient rather than an image: no HDR decoder, no
+precomputation, no asset to ship, no per-platform texture format, and identical on all six targets.
+
 ```csharp
 // Every format, one type, and the caller never learns which parser ran.
 Scene fromPrinter = StlReader.ReadFile("part.stl");        // welded, sharp edges kept sharp

@@ -230,6 +230,179 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
             $"a correctly wound box was flagged as inverted: {fine}");
     }
 
+    // ---- environment ------------------------------------------------------------------------
+
+    [Fact]
+    public void A_metal_is_not_black_because_it_has_something_to_reflect()
+    {
+        // THE REASON THE ENVIRONMENT EXISTS. A metallic surface has no diffuse colour at all —
+        // everything visible on chrome is a reflection — so with nothing around it, correct
+        // physics renders it near-black and every user reads that as a broken shader.
+        var chrome = new Material { BaseColor = Vector4.One, Metallic = 1f, Roughness = 0.15f };
+        var scene = Box(new Vector3(10, 10, 10), chrome);
+
+        var lit = Render(scene, settings: new RenderSettings
+        {
+            ClearColor = Backdrop, Up = UpAxis.Z, Environment = Environment.Studio,
+        });
+        var void_ = Render(scene, settings: new RenderSettings
+        {
+            ClearColor = Backdrop, Up = UpAxis.Z,
+            Environment = Environment.Studio with { Intensity = 0f },
+        });
+
+        var reflecting = lit.At(Size / 2, Size / 2);
+        var starved = void_.At(Size / 2, Size / 2);
+        output.WriteLine($"with an environment {reflecting}, without {starved}");
+
+        Assert.True(reflecting.Lit, $"a mirror with a room around it rendered {reflecting}");
+        Assert.True(reflecting.R + reflecting.G + reflecting.B > starved.R + starved.G + starved.B + 30,
+            "the environment made no difference to a fully metallic surface, which is the one case it exists for");
+    }
+
+    [Fact]
+    public void The_environment_gradient_follows_the_up_axis()
+    {
+        // A Z-up printed part lit by a Y-up gradient is lit from the side, which looks like a lamp in
+        // the wrong place rather than like a wrong setting — so the shader is told which axis is up
+        // rather than assuming one.
+        var chrome = new Material { BaseColor = Vector4.One, Metallic = 1f, Roughness = 0.2f };
+        var scene = Box(new Vector3(10, 10, 10), chrome);
+        var camera = Camera.Frame(scene.Bounds, UpAxis.Z, yaw: 0.6f, pitch: 0.5f);
+
+        var zUp = Render(scene, camera, new RenderSettings
+        { ClearColor = Backdrop, Up = UpAxis.Z, Environment = Environment.Studio });
+        var yUp = Render(scene, camera, new RenderSettings
+        { ClearColor = Backdrop, Up = UpAxis.Y, Environment = Environment.Studio });
+
+        // Compared as WHOLE FRAMES rather than at one pixel, and the first attempt got that wrong:
+        // the centre pixel sits on a face whose normal is perpendicular to both axes, where the two
+        // gradients legitimately agree. A single sample can only ever prove something about the
+        // surface it happened to land on.
+        var different = zUp.DifferingPixels(yUp);
+        output.WriteLine($"{different} of {Size * Size} pixels differ between Z-up and Y-up");
+        Assert.True(different > Size * Size / 20,
+            $"only {different} pixels changed when the up axis did; the gradient is not following it");
+    }
+
+    [Fact]
+    public void A_rough_metal_reflects_a_flatter_picture_than_a_polished_one()
+    {
+        // Roughness blends the reflection towards the diffuse lookup, which is what a blurrier
+        // reflection of the same room actually looks like. A polished box shows the gradient varying
+        // sharply across its faces; a rough one evens out.
+        var settings = new RenderSettings { ClearColor = Backdrop, Up = UpAxis.Z };
+        var polished = Render(Box(new Vector3(10, 10, 10),
+            new Material { BaseColor = Vector4.One, Metallic = 1f, Roughness = 0.05f }), settings: settings);
+        var rough = Render(Box(new Vector3(10, 10, 10),
+            new Material { BaseColor = Vector4.One, Metallic = 1f, Roughness = 0.95f }), settings: settings);
+
+        Assert.True(polished.DistinctColors > 1 && rough.DistinctColors > 1);
+        output.WriteLine($"polished {polished.DistinctColors} colours, rough {rough.DistinctColors}");
+        Assert.NotEqual(polished.At(Size / 2, Size / 2), rough.At(Size / 2, Size / 2));
+    }
+
+    // ---- textures ---------------------------------------------------------------------------
+
+    /// <summary>A quad facing the camera whose UVs run 0..2, so wrapping behaviour is visible.</summary>
+    private static Scene TexturedQuad(TextureWrap wrap, byte[]? normalMap = null)
+    {
+        var quad = new Mesh
+        {
+            Positions = [new(-5, -5, 0), new(5, -5, 0), new(5, 5, 0), new(-5, 5, 0)],
+            Normals = [new(0, 0, 1), new(0, 0, 1), new(0, 0, 1), new(0, 0, 1)],
+            Uvs = [new(0, 0), new(2, 0), new(2, 2), new(0, 2)],
+            Indices = [0, 1, 2, 0, 2, 3],
+        };
+
+        // A 2x2 checker: two very different colours, so a wrap difference is unmistakable.
+        byte[] checker =
+        [
+            255, 40, 40, 255,   40, 255, 40, 255,
+            40, 255, 40, 255,   255, 40, 40, 255,
+        ];
+
+        var images = new List<ImageData> { new(checker, 2, 2) };
+        var textures = new List<TextureRef>
+        {
+            new(0) { WrapS = wrap, WrapT = wrap, Magnify = TextureFilter.Nearest, Mipmaps = false },
+        };
+        var material = new Material { BaseColorTexture = 0, Unlit = normalMap is null };
+
+        if (normalMap is not null)
+        {
+            images.Add(new ImageData(normalMap, 2, 2));
+            textures.Add(new TextureRef(1) { Magnify = TextureFilter.Nearest, Mipmaps = false });
+            material = new Material { BaseColorTexture = 0, NormalTexture = 1, Roughness = 0.4f };
+            quad = MeshTangents.WithTangents(quad);
+        }
+
+        return new Scene
+        {
+            Meshes = [quad],
+            Images = images,
+            Textures = textures,
+            Materials = [material],
+            Roots = [new Node { Mesh = 0, Material = 0 }],
+            Up = UpAxis.Y,
+        };
+    }
+
+    /// <summary>Looking straight at the quad, close enough to fill the frame.</summary>
+    private static Camera FaceOn => new(new Vector3(0, 0, 14), Vector3.Zero, Vector3.UnitY,
+                                        Camera.DefaultFieldOfView, 1f, 100f);
+
+    [Fact]
+    public void A_texture_reaches_the_screen()
+    {
+        var frame = Render(TexturedQuad(TextureWrap.Repeat), FaceOn);
+
+        // Two very different colours went in; both must come out.
+        Assert.True(frame.DistinctColors >= 2, $"the texture produced {frame.DistinctColors} colours");
+        Assert.True(frame.LitFraction > 0.3f, "the textured quad barely covered the frame");
+    }
+
+    [Fact]
+    public void Wrap_mode_changes_what_is_on_screen()
+    {
+        // THE FAILURE THIS GUARDS IS NOT A WRAPPING BUG, IT LOOKS LIKE A BROKEN UV UNWRAP. A texture
+        // authored to tile but sampled with clamping shows one stretched edge texel across most of
+        // the surface, and nothing errors — the texture parameters even read back as they were set.
+        // The related CupriFace work lost a full session to exactly this.
+        var repeat = Render(TexturedQuad(TextureWrap.Repeat), FaceOn);
+        var clamp = Render(TexturedQuad(TextureWrap.ClampToEdge), FaceOn);
+
+        var repeatBands = repeat.HorizontalTransitions(Size / 2);
+        var clampBands = clamp.HorizontalTransitions(Size / 2);
+        output.WriteLine($"repeat {repeatBands} colour changes across the middle, clamp {clampBands}");
+
+        Assert.True(repeat.DifferingPixels(clamp) > Size * Size / 10,
+            "clamping and repeating produced the same image, so the sampler state is being ignored");
+        // UVs run 0..2, so repeating shows twice the checker and therefore more bands.
+        Assert.True(repeatBands > clampBands,
+            $"repeat gave {repeatBands} bands and clamp {clampBands}; repeat should show more");
+    }
+
+    [Fact]
+    public void A_normal_map_changes_the_shading_of_a_flat_surface()
+    {
+        // The whole point of a normal map: a flat quad lit as though it were not flat. Two maps that
+        // tilt the surface opposite ways must light differently, which a map being ignored — or
+        // applied against a missing tangent frame — could not produce.
+        // Encoded as (n * 0.5 + 0.5), so 128 is zero and the extremes tilt hard.
+        byte[] left = [40, 128, 255, 255, 40, 128, 255, 255, 40, 128, 255, 255, 40, 128, 255, 255];
+        byte[] right = [215, 128, 255, 255, 215, 128, 255, 255, 215, 128, 255, 255, 215, 128, 255, 255];
+
+        var settings = new RenderSettings { ClearColor = Backdrop, Up = UpAxis.Y };
+        var tiltedLeft = Render(TexturedQuad(TextureWrap.Repeat, left), FaceOn, settings);
+        var tiltedRight = Render(TexturedQuad(TextureWrap.Repeat, right), FaceOn, settings);
+
+        var differing = tiltedLeft.DifferingPixels(tiltedRight);
+        output.WriteLine($"{differing} pixels differ between the two normal maps");
+        Assert.True(differing > Size * Size / 10,
+            $"only {differing} pixels changed when the normal map did; the map is not being applied");
+    }
+
     // ---- resource handling ------------------------------------------------------------------
 
     [Fact]
@@ -321,6 +494,33 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
                     if (pixels[i] > 12 || pixels[i + 1] > 12 || pixels[i + 2] > 12) lit++;
                 return (float)lit / (width * height);
             }
+        }
+
+        internal byte[] Pixels => pixels;
+
+        /// <summary>How many times the colour changes along one row — a count of visible bands,
+        /// which is what tiling produces more of.</summary>
+        internal int HorizontalTransitions(int y)
+        {
+            var changes = 0;
+            for (var x = 1; x < width; x++)
+            {
+                var a = At(x - 1, y);
+                var b = At(x, y);
+                if (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) > 40) changes++;
+            }
+            return changes;
+        }
+
+        /// <summary>How many pixels differ from another frame of the same size.</summary>
+        internal int DifferingPixels(Frame other)
+        {
+            var them = other.Pixels;
+            var count = 0;
+            for (var i = 0; i < pixels.Length && i < them.Length; i += 4)
+                if (pixels[i] != them[i] || pixels[i + 1] != them[i + 1] || pixels[i + 2] != them[i + 2])
+                    count++;
+            return count;
         }
 
         /// <summary>How many distinct non-backdrop colours appear. A flat-shaded box shows one per

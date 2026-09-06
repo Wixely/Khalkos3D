@@ -105,6 +105,7 @@ public static class GltfReader
         private readonly List<Mesh> _meshes = [];
         private readonly List<Material> _materials = [];
         private readonly List<ImageData> _images = [];
+        private readonly List<TextureRef> _textures = [];
         // glTF meshes hold several primitives; this engine's Mesh holds one. The map records which
         // of our meshes each glTF mesh became, with the material each carries.
         private readonly Dictionary<int, List<(int Mesh, int? Material)>> _meshParts = [];
@@ -114,6 +115,7 @@ public static class GltfReader
             RefuseUnsupportedExtensions();
             LoadBuffers();
             LoadImages();
+            LoadTextures();
             LoadMaterials();
             LoadMeshes();
             NoteWhatWasSkipped();
@@ -126,6 +128,7 @@ public static class GltfReader
                 Meshes = _meshes,
                 Materials = _materials,
                 Images = _images,
+                Textures = _textures,
                 Roots = roots,
                 Report = report.Build(),
                 // The specification is explicit: glTF is Y-up.
@@ -230,7 +233,7 @@ public static class GltfReader
                     if (pbr.TryGetProperty("metallicFactor", out var m)) metallic = m.GetSingle();
                     if (pbr.TryGetProperty("roughnessFactor", out var r)) roughness = r.GetSingle();
                     if (pbr.TryGetProperty("baseColorTexture", out var texture))
-                        baseTexture = ResolveTextureImage(texture);
+                        baseTexture = ResolveTexture(texture);
                 }
 
                 if (material.TryGetProperty("extensions", out _))
@@ -257,7 +260,7 @@ public static class GltfReader
                         : Vector3.Zero,
                     BaseColorTexture = baseTexture,
                     NormalTexture = material.TryGetProperty("normalTexture", out var nt)
-                        ? ResolveTextureImage(nt) : null,
+                        ? ResolveTexture(nt) : null,
                     Alpha = alpha,
                     AlphaCutoff = material.TryGetProperty("alphaCutoff", out var cutoff)
                         ? cutoff.GetSingle() : 0.5f,
@@ -268,18 +271,64 @@ public static class GltfReader
             }
         }
 
-        private int? ResolveTextureImage(JsonElement textureRef)
+        /// <summary>
+        /// Pair every image with its sampler, which is what glTF's <c>textures</c> array is for.
+        ///
+        /// <para>WRAP MODE IS THE FIELD THAT MATTERS. A texture authored to tile, sampled with
+        /// clamping, does not look like a wrapping bug — it looks like a broken UV unwrap, with one
+        /// stretched edge texel smeared across most of the model. Ignoring the sampler and defaulting
+        /// everything to REPEAT would be right most of the time and silently wrong the rest.</para>
+        /// </summary>
+        private void LoadTextures()
+        {
+            if (!root.TryGetProperty("textures", out var textures)) return;
+            var samplers = root.TryGetProperty("samplers", out var declared)
+                ? declared.EnumerateArray().ToArray() : [];
+
+            foreach (var texture in textures.EnumerateArray())
+            {
+                var source = texture.TryGetProperty("source", out var src) ? src.GetInt32() : -1;
+                // A texture with no readable image still occupies its slot, so that every later
+                // index keeps pointing at what the file said it points at.
+                var reference = new TextureRef((uint)source < (uint)_images.Count ? source : -1);
+
+                if (texture.TryGetProperty("sampler", out var samplerRef))
+                {
+                    var index = samplerRef.GetInt32();
+                    if ((uint)index < (uint)samplers.Length) reference = WithSampler(reference, samplers[index]);
+                }
+                _textures.Add(reference);
+            }
+        }
+
+        /// <summary>glTF stores sampler settings as raw GL enum values.</summary>
+        private static TextureRef WithSampler(TextureRef reference, JsonElement sampler)
+        {
+            static TextureWrap Wrap(int value) => value switch
+            {
+                33071 => TextureWrap.ClampToEdge,
+                33648 => TextureWrap.MirroredRepeat,
+                _ => TextureWrap.Repeat,
+            };
+
+            var minFilter = sampler.TryGetProperty("minFilter", out var min) ? min.GetInt32() : 9987;
+            return reference with
+            {
+                WrapS = sampler.TryGetProperty("wrapS", out var s) ? Wrap(s.GetInt32()) : TextureWrap.Repeat,
+                WrapT = sampler.TryGetProperty("wrapT", out var t) ? Wrap(t.GetInt32()) : TextureWrap.Repeat,
+                Magnify = sampler.TryGetProperty("magFilter", out var mag) && mag.GetInt32() == 9728
+                    ? TextureFilter.Nearest : TextureFilter.Linear,
+                // 9728 and 9729 are the two non-mipmapped filters; 9984..9987 all sample a mip chain.
+                Minify = minFilter is 9728 or 9984 or 9986 ? TextureFilter.Nearest : TextureFilter.Linear,
+                Mipmaps = minFilter is not (9728 or 9729),
+            };
+        }
+
+        private int? ResolveTexture(JsonElement textureRef)
         {
             if (!textureRef.TryGetProperty("index", out var indexElement)) return null;
-            if (!root.TryGetProperty("textures", out var textures)) return null;
-
             var index = indexElement.GetInt32();
-            var list = textures.EnumerateArray().ToArray();
-            if ((uint)index >= (uint)list.Length) return null;
-            if (!list[index].TryGetProperty("source", out var source)) return null;
-
-            var image = source.GetInt32();
-            return (uint)image < (uint)_images.Count ? image : null;
+            return (uint)index < (uint)_textures.Count ? index : null;
         }
 
         private void LoadMeshes()
@@ -287,6 +336,7 @@ public static class GltfReader
             if (!root.TryGetProperty("meshes", out var meshes)) return;
             var meshIndex = 0;
             var skipped = 0;
+            var tangentsGenerated = 0;
 
             foreach (var mesh in meshes.EnumerateArray())
             {
@@ -306,8 +356,31 @@ public static class GltfReader
                         var built = ReadPrimitive(primitive, meshName);
                         if (built is null) { skipped++; continue; }
 
-                        _meshes.Add(built);
                         var material = primitive.TryGetProperty("material", out var mat) ? mat.GetInt32() : (int?)null;
+
+                        // A normal map is stored in TANGENT SPACE, so it cannot be interpreted
+                        // without a tangent frame. glTF often supplies one and often does not, so a
+                        // missing frame is derived here rather than left for the renderer to
+                        // discover and silently skip the map over.
+                        if (built.Tangents is null && material is { } materialIndex &&
+                            (uint)materialIndex < (uint)_materials.Count &&
+                            _materials[materialIndex].NormalTexture is not null)
+                        {
+                            var withTangents = MeshTangents.WithTangents(built);
+                            if (!ReferenceEquals(withTangents, built))
+                            {
+                                built = withTangents;
+                                tangentsGenerated++;
+                            }
+                            else
+                            {
+                                report.Unsupported("normal map",
+                                    "a material has a normal map but its mesh has no texture coordinates, " +
+                                    "so no tangent frame could be derived and the map is not applied");
+                            }
+                        }
+
+                        _meshes.Add(built);
                         parts.Add((_meshes.Count - 1, material));
                     }
                 }
@@ -318,6 +391,10 @@ public static class GltfReader
             if (skipped > 0)
                 report.Unsupported("primitive mode",
                     $"{skipped} primitive(s) were not triangle lists and are not shown");
+            if (tangentsGenerated > 0)
+                report.Info("tangents",
+                    $"{tangentsGenerated} mesh(es) needed a tangent frame for their normal map; it was " +
+                    "derived from the geometry and the texture coordinates");
         }
 
         private Mesh? ReadPrimitive(JsonElement primitive, string? meshName)
@@ -332,6 +409,8 @@ public static class GltfReader
                 ? ReadVector3Accessor(normalRef.GetInt32()) : null;
             var uvs = attributes.TryGetProperty("TEXCOORD_0", out var uvRef)
                 ? ReadVector2Accessor(uvRef.GetInt32()) : null;
+            var tangents = attributes.TryGetProperty("TANGENT", out var tangentRef)
+                ? ReadVector4Accessor(tangentRef.GetInt32()) : null;
 
             if (attributes.TryGetProperty("TEXCOORD_1", out _))
                 report.Unsupported("TEXCOORD_1", "only the first texture coordinate set is read");
@@ -356,6 +435,7 @@ public static class GltfReader
                 Indices = indices,
                 Normals = normals?.Length == positions.Length ? normals : null,
                 Uvs = uvs?.Length == positions.Length ? uvs : null,
+                Tangents = tangents?.Length == positions.Length ? tangents : null,
                 Name = meshName,
             };
 
@@ -377,6 +457,7 @@ public static class GltfReader
                 Indices = built.Indices,
                 Normals = built.ComputeSmoothNormals(),
                 Uvs = built.Uvs,
+                Tangents = built.Tangents,
                 Name = meshName,
             };
         }
@@ -587,6 +668,25 @@ public static class GltfReader
                                         BinaryPrimitives.ReadUInt16LittleEndian(data[(at + 2)..]) / 65535f),
                     _ => Vector2.Zero,
                 };
+            }
+            return result;
+        }
+
+        private Vector4[]? ReadVector4Accessor(int index)
+        {
+            if (!TryAccessor(index, out var data, out var count, out var componentType, out var components, out var stride)
+                || components < 4 || componentType != 5126)
+                return null;
+
+            var result = new Vector4[count];
+            for (var i = 0; i < count; i++)
+            {
+                var at = i * stride;
+                result[i] = new Vector4(
+                    BinaryPrimitives.ReadSingleLittleEndian(data[at..]),
+                    BinaryPrimitives.ReadSingleLittleEndian(data[(at + 4)..]),
+                    BinaryPrimitives.ReadSingleLittleEndian(data[(at + 8)..]),
+                    BinaryPrimitives.ReadSingleLittleEndian(data[(at + 12)..]));
             }
             return result;
         }

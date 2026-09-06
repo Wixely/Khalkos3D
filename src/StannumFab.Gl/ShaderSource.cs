@@ -17,7 +17,7 @@ internal static class ShaderSource
 {
     /// <summary>Attribute locations, bound before linking so the renderer never has to query them and
     /// a mesh missing a channel simply leaves that slot disabled.</summary>
-    internal const uint AttrPosition = 0, AttrNormal = 1, AttrUv = 2, AttrColor = 3;
+    internal const uint AttrPosition = 0, AttrNormal = 1, AttrUv = 2, AttrColor = 3, AttrTangent = 4;
 
     /// <summary>The version line, plus the precision qualifier ES requires and desktop rejects.</summary>
     internal static string Header(GlslDialect dialect) => dialect == GlslDialect.GlEs300
@@ -29,6 +29,7 @@ internal static class ShaderSource
         in vec3 aNormal;
         in vec2 aUv;
         in vec4 aColor;
+        in vec4 aTangent;
 
         uniform mat4 uMvp;
         uniform mat4 uModel;
@@ -38,6 +39,7 @@ internal static class ShaderSource
         out vec3 vWorld;
         out vec2 vUv;
         out vec4 vColor;
+        out vec4 vTangent;
 
         void main() {
             vec4 world = uModel * vec4(aPos, 1.0);
@@ -47,6 +49,8 @@ internal static class ShaderSource
             // holding a stretched part routinely does — using the model matrix tilts every normal and
             // the lighting slides across the surface as it rotates.
             vNormal = mat3(uNormalMatrix) * aNormal;
+            // The handedness in w survives the transform untouched: it is a sign, not a direction.
+            vTangent = vec4(mat3(uNormalMatrix) * aTangent.xyz, aTangent.w);
             vUv = aUv;
             vColor = aColor;
             gl_Position = uMvp * vec4(aPos, 1.0);
@@ -58,6 +62,7 @@ internal static class ShaderSource
         in vec3 vWorld;
         in vec2 vUv;
         in vec4 vColor;
+        in vec4 vTangent;
 
         uniform vec4  uBaseColor;
         uniform float uMetallic;
@@ -66,9 +71,14 @@ internal static class ShaderSource
         uniform vec3  uCamPos;
         uniform vec3  uLightDir;
         uniform vec3  uLightColor;
-        uniform vec3  uAmbient;
+        uniform vec3  uSkyColor;
+        uniform vec3  uHorizonColor;
+        uniform vec3  uGroundColor;
+        uniform vec3  uUpAxis;
         uniform sampler2D uTex;
+        uniform sampler2D uNormalTex;
         uniform int   uHasTex;
+        uniform int   uHasNormalMap;
         uniform int   uHasVertexColor;
         uniform int   uAlphaMode;      // 0 opaque, 1 mask, 2 blend
         uniform float uAlphaCutoff;
@@ -80,6 +90,15 @@ internal static class ShaderSource
         out vec4 fragColor;
 
         const float PI = 3.14159265359;
+
+        // The environment, as a three-colour gradient by direction. Squared towards the poles rather
+        // than linear, because a linear ramp leaves the horizon colour in a narrow band and reads as
+        // two flat halves with a seam.
+        vec3 environment(vec3 dir) {
+            float h = clamp(dot(dir, uUpAxis), -1.0, 1.0);
+            return h >= 0.0 ? mix(uHorizonColor, uSkyColor, h * h)
+                            : mix(uHorizonColor, uGroundColor, h * h);
+        }
 
         void main() {
             vec4 base = uBaseColor;
@@ -105,12 +124,26 @@ internal static class ShaderSource
             }
 
             vec3 N = normalize(vNormal);
+            vec3 V = normalize(uCamPos - vWorld);
+
+            // Normal mapping BEFORE the two-sided flip, because the flip is a display correction and
+            // the map is surface detail: applying the map to an already-flipped normal would put the
+            // detail on backwards wherever a facet happened to be inverted.
+            if (uHasNormalMap == 1) {
+                vec3 T = normalize(vTangent.xyz);
+                T = normalize(T - N * dot(N, T));
+                // The handedness matters: a symmetric model usually maps both halves to the same
+                // texture region, so one half is mirrored. Without the sign its surface detail comes
+                // out punched in rather than raised.
+                vec3 B = cross(N, T) * vTangent.w;
+                vec3 sampled = texture(uNormalTex, vUv).xyz * 2.0 - 1.0;
+                N = normalize(mat3(T, B, N) * sampled);
+            }
 
             // Two-sided shading, and it is not optional for this engine's first use case: real STL
             // files routinely contain inverted facets, and a slicer prints them fine. Flipping the
             // normal towards the viewer means such a facet shades like its neighbours instead of
             // appearing as a black hole in an otherwise valid part.
-            vec3 V = normalize(uCamPos - vWorld);
             if (dot(N, V) < 0.0) N = -N;
 
             if (uShowNormals == 1) {
@@ -143,11 +176,21 @@ internal static class ShaderSource
             vec3 kD     = (vec3(1.0) - F) * (1.0 - uMetallic);
             vec3 direct = (kD * albedo / PI + spec) * NdotL * uLightColor;
 
-            // Standing in for image-based lighting. Without it a metal has nothing to reflect and
-            // renders black, which reads as a broken shader rather than as an unlit material — so the
-            // term is scaled down for metals rather than removed, and is the first thing a real
-            // environment map replaces.
-            vec3 ambient = albedo * uAmbient * (1.0 - uMetallic * 0.6);
+            // IMAGE-BASED LIGHTING, APPROXIMATED. A metal has no diffuse colour at all — everything
+            // visible on chrome is a reflection — so with nothing to reflect it renders black and
+            // looks broken. Two lookups stand in for a prefiltered environment map: one along the
+            // normal for the diffuse half, one along the reflection for the specular half, blended
+            // towards the diffuse one as roughness rises because a rough surface reflects a blurrier
+            // and therefore flatter picture of its surroundings.
+            vec3 irradiance = environment(N);
+            vec3 reflection = mix(environment(reflect(-V, N)), irradiance, rough);
+
+            // Fresnel with roughness folded in: the grazing-angle brightening has to fall off on a
+            // rough surface, or every matte object gets a hard bright rim.
+            vec3 Fr = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NdotV, 5.0);
+
+            vec3 ambient = irradiance * albedo * (1.0 - uMetallic) * (vec3(1.0) - Fr)
+                         + reflection * Fr;
 
             vec3 colour = direct + ambient + uEmissive;
             colour = colour / (colour + vec3(1.0));      // Reinhard

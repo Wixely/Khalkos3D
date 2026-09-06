@@ -28,7 +28,7 @@ public sealed unsafe class GlRenderer : IDisposable
     private readonly uint _program;
     private readonly Uniforms _u;
     private readonly Dictionary<Mesh, GpuMesh> _meshes = new(ReferenceEqualityComparer.Instance as IEqualityComparer<Mesh> ?? EqualityComparer<Mesh>.Default);
-    private readonly Dictionary<ImageData, uint> _textures = [];
+    private readonly Dictionary<TextureRef, uint> _textures = [];
     private uint _whiteTexture;
     private bool _disposed;
 
@@ -138,11 +138,20 @@ public sealed unsafe class GlRenderer : IDisposable
         SetVector3(_u.CamPos, camera.Position);
         SetVector3(_u.LightDir, Normalise(settings.LightDirection, new Vector3(0, -1, 0)));
         SetVector3(_u.LightColor, settings.LightColor);
-        SetVector3(_u.Ambient, settings.Ambient);
+
+        var environment = settings.Environment;
+        var intensity = MathF.Max(environment.Intensity, 0f);
+        SetVector3(_u.SkyColor, environment.Sky * intensity);
+        SetVector3(_u.HorizonColor, environment.Horizon * intensity);
+        SetVector3(_u.GroundColor, environment.Ground * intensity);
+        SetVector3(_u.UpAxis, settings.Up == StannumFab.UpAxis.Z ? Vector3.UnitZ : Vector3.UnitY);
         gl.Uniform1i(_u.ShowNormals, settings.ShowNormals ? 1 : 0);
         gl.Uniform1i(_u.HighlightBackfaces, settings.HighlightBackfaces ? 1 : 0);
         SetVector3(_u.BackfaceColor, settings.BackfaceColor);
+        // Fixed units: base colour on 0, normal map on 1. Set once per frame rather than per draw,
+        // since the sampler-to-unit mapping never changes.
         gl.Uniform1i(_u.Tex, 0);
+        gl.Uniform1i(_u.NormalTex, 1);
 
         // Opaque first, then transparent back to front. Sorting only the transparent half is the
         // whole reason AlphaMode exists as a distinction: sorting everything would cost a pass over
@@ -157,7 +166,8 @@ public sealed unsafe class GlRenderer : IDisposable
                 (transparent ??= []).Add((mesh, world, material, Vector3.DistanceSquared(centre, camera.Position)));
                 continue;
             }
-            DrawOne(mesh, world, material, TextureFor(scene, material), viewProjection, settings);
+            DrawOne(mesh, world, material, TextureFor(scene, material),
+                    NormalMapFor(scene, material), viewProjection, settings);
         }
 
         if (transparent is null) return;
@@ -169,12 +179,13 @@ public sealed unsafe class GlRenderer : IDisposable
         // geometry in front of it, and must not hide the transparent surfaces behind it.
         gl.DepthMask(0);
         foreach (var (mesh, world, material, _) in transparent)
-            DrawOne(mesh, world, material, TextureFor(scene, material), viewProjection, settings);
+            DrawOne(mesh, world, material, TextureFor(scene, material),
+                    NormalMapFor(scene, material), viewProjection, settings);
         gl.DepthMask(1);
         gl.Disable(GlApi.BLEND);
     }
 
-    private void DrawOne(Mesh mesh, Matrix4x4 world, Material material, uint texture,
+    private void DrawOne(Mesh mesh, Matrix4x4 world, Material material, uint texture, uint normalMap,
                          Matrix4x4 viewProjection, RenderSettings settings)
     {
         var gl = _gl;
@@ -212,6 +223,16 @@ public sealed unsafe class GlRenderer : IDisposable
         // and renders black on others, which is the worst kind of difference to debug remotely.
         gl.BindTexture(GlApi.TEXTURE_2D, texture != 0 ? texture : White());
         gl.Uniform1i(_u.HasTex, texture != 0 ? 1 : 0);
+
+        // A normal map needs a tangent frame to be interpreted in. Without one the map would be
+        // applied against an arbitrary basis and the lighting would swim as the model turns, so the
+        // map is ignored rather than applied wrongly - and MeshTangents exists so a loader can
+        // supply the frame rather than a caller discovering this.
+        var useNormalMap = normalMap != 0 && gpu.HasTangents;
+        gl.ActiveTexture(GlApi.TEXTURE0 + 1);
+        gl.BindTexture(GlApi.TEXTURE_2D, useNormalMap ? normalMap : White());
+        gl.Uniform1i(_u.HasNormalMap, useNormalMap ? 1 : 0);
+        gl.ActiveTexture(GlApi.TEXTURE0);
 
         // Culling is skipped whenever a back face is something we want to SEE: a double-sided
         // material, a wireframe, or the debug view whose entire purpose is to show them. Leaving
@@ -271,12 +292,13 @@ public sealed unsafe class GlRenderer : IDisposable
         var hasUv = mesh.Uvs is { Length: > 0 };
         var hasColor = mesh.Colors is { Length: > 0 };
         var hasNormal = mesh.Normals is { Length: > 0 };
+        var hasTangent = mesh.Tangents is { Length: > 0 };
 
         // Interleaved into ONE buffer rather than one per channel. A vertex is fetched as a unit, so
         // separate arrays cost an extra cache line per attribute per vertex — which on a
         // million-triangle print is the difference between a smooth orbit and a stuttering one. The
         // packing happens once, at upload, not per frame.
-        var floats = 3 + (hasNormal ? 3 : 0) + (hasUv ? 2 : 0) + (hasColor ? 4 : 0);
+        var floats = 3 + (hasNormal ? 3 : 0) + (hasUv ? 2 : 0) + (hasColor ? 4 : 0) + (hasTangent ? 4 : 0);
         var stride = floats * sizeof(float);
         var data = new float[(long)mesh.VertexCount * floats];
 
@@ -287,6 +309,7 @@ public sealed unsafe class GlRenderer : IDisposable
             if (hasNormal) { var n = mesh.Normals![v]; data[at++] = n.X; data[at++] = n.Y; data[at++] = n.Z; }
             if (hasUv) { var t = mesh.Uvs![v]; data[at++] = t.X; data[at++] = t.Y; }
             if (hasColor) { var c = mesh.Colors![v]; data[at++] = c.X; data[at++] = c.Y; data[at++] = c.Z; data[at++] = c.W; }
+            if (hasTangent) { var g = mesh.Tangents![v]; data[at++] = g.X; data[at++] = g.Y; data[at++] = g.Z; data[at++] = g.W; }
         }
 
         uint vao, vbo, ebo;
@@ -303,6 +326,7 @@ public sealed unsafe class GlRenderer : IDisposable
         if (hasNormal) Attribute(ShaderSource.AttrNormal, 3, ref offset);
         if (hasUv) Attribute(ShaderSource.AttrUv, 2, ref offset);
         if (hasColor) Attribute(ShaderSource.AttrColor, 4, ref offset);
+        if (hasTangent) Attribute(ShaderSource.AttrTangent, 4, ref offset);
 
         gl.GenBuffers(1, &ebo);
         gl.BindBuffer(GlApi.ELEMENT_ARRAY_BUFFER, ebo);
@@ -319,6 +343,7 @@ public sealed unsafe class GlRenderer : IDisposable
             Indices = ebo,
             IndexCount = mesh.Indices.Length,
             HasColor = hasColor,
+            HasTangents = hasTangent,
         };
         _meshes[mesh] = gpu;
         return gpu;
@@ -339,18 +364,27 @@ public sealed unsafe class GlRenderer : IDisposable
     /// four materials is uploaded once — which is what the scene model already said by making
     /// textures indices rather than objects.</para>
     /// </summary>
-    private uint TextureFor(Scene scene, Material material)
-    {
-        if (material.BaseColorTexture is not { } index) return 0;
-        if ((uint)index >= (uint)scene.Images.Count) return 0;
+    private uint TextureFor(Scene scene, Material material) =>
+        material.BaseColorTexture is { } index ? TextureAt(scene, index) : 0;
 
-        var image = scene.Images[index];
+    private uint NormalMapFor(Scene scene, Material material) =>
+        material.NormalTexture is { } index ? TextureAt(scene, index) : 0;
+
+    private uint TextureAt(Scene scene, int index)
+    {
+        if ((uint)index >= (uint)scene.Textures.Count) return 0;
+        var reference = scene.Textures[index];
+        if ((uint)reference.Image >= (uint)scene.Images.Count) return 0;
+
+        var image = scene.Images[reference.Image];
         // A loader with no image decoder records a placeholder rather than failing the load, so an
         // empty one here is the documented "textures were skipped" outcome and not an error.
         if (image.Width <= 0 || image.Height <= 0 || image.Pixels.Length < image.Width * image.Height * 4)
             return 0;
 
-        if (_textures.TryGetValue(image, out var existing)) return existing;
+        // Keyed on the TEXTURE, not the image: the same image sampled tiling on one material and
+        // clamped on another is two GL objects, because the sampler state lives on the object.
+        if (_textures.TryGetValue(reference, out var existing)) return existing;
 
         uint texture;
         _gl.GenTextures(1, &texture);
@@ -359,18 +393,37 @@ public sealed unsafe class GlRenderer : IDisposable
             _gl.TexImage2D(GlApi.TEXTURE_2D, 0, (int)GlApi.RGBA8, image.Width, image.Height, 0,
                            GlApi.RGBA, GlApi.UNSIGNED_BYTE, pixels);
 
-        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_WRAP_S, GlApi.REPEAT);
-        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_WRAP_T, GlApi.REPEAT);
-        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_MAG_FILTER, GlApi.LINEAR);
-        // Mipmapped minification, generated here. Without it a texture minified across a curved
-        // surface aliases into a shimmering mess the moment the model moves, which reads as a
-        // rendering fault rather than as a missing filter setting.
-        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_MIN_FILTER, GlApi.LINEAR_MIPMAP_LINEAR);
-        _gl.GenerateMipmap(GlApi.TEXTURE_2D);
+        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_WRAP_S, Wrap(reference.WrapS));
+        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_WRAP_T, Wrap(reference.WrapT));
+        _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_MAG_FILTER,
+                          reference.Magnify == TextureFilter.Nearest ? GlApi.NEAREST : GlApi.LINEAR);
 
-        _textures[image] = texture;
+        if (reference.Mipmaps)
+        {
+            // Without a mip chain a texture minified across a curved surface aliases into a
+            // shimmering mess the moment the model turns, which reads as a rendering fault rather
+            // than as a missing filter setting.
+            _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_MIN_FILTER,
+                reference.Minify == TextureFilter.Nearest
+                    ? GlApi.NEAREST_MIPMAP_LINEAR : GlApi.LINEAR_MIPMAP_LINEAR);
+            _gl.GenerateMipmap(GlApi.TEXTURE_2D);
+        }
+        else
+        {
+            _gl.TexParameteri(GlApi.TEXTURE_2D, GlApi.TEX_MIN_FILTER,
+                reference.Minify == TextureFilter.Nearest ? GlApi.NEAREST : GlApi.LINEAR);
+        }
+
+        _textures[reference] = texture;
         return texture;
     }
+
+    private static int Wrap(TextureWrap wrap) => wrap switch
+    {
+        TextureWrap.ClampToEdge => GlApi.CLAMP_TO_EDGE,
+        TextureWrap.MirroredRepeat => GlApi.MIRRORED_REPEAT,
+        _ => GlApi.REPEAT,
+    };
 
     /// <summary>The line index buffer for a wireframe pass, built once per mesh and kept.</summary>
     private (uint Buffer, int Count) EnsureEdges(GpuMesh gpu, Mesh mesh)
@@ -472,8 +525,10 @@ public sealed unsafe class GlRenderer : IDisposable
     /// uniform away, which is legal and is why every setter tolerates it.</summary>
     private sealed class Uniforms
     {
-        internal readonly int Mvp, Model, NormalMatrix, CamPos, LightDir, LightColor, Ambient;
+        internal readonly int Mvp, Model, NormalMatrix, CamPos, LightDir, LightColor;
+        internal readonly int SkyColor, HorizonColor, GroundColor, UpAxis;
         internal readonly int BaseColor, Metallic, Roughness, Emissive, Tex, HasTex;
+        internal readonly int NormalTex, HasNormalMap;
         internal readonly int HasVertexColor, AlphaMode, AlphaCutoff, ShowNormals;
         internal readonly int Unlit, HighlightBackfaces, BackfaceColor;
 
@@ -485,13 +540,18 @@ public sealed unsafe class GlRenderer : IDisposable
             CamPos = Find(gl, program, "uCamPos");
             LightDir = Find(gl, program, "uLightDir");
             LightColor = Find(gl, program, "uLightColor");
-            Ambient = Find(gl, program, "uAmbient");
+            SkyColor = Find(gl, program, "uSkyColor");
+            HorizonColor = Find(gl, program, "uHorizonColor");
+            GroundColor = Find(gl, program, "uGroundColor");
+            UpAxis = Find(gl, program, "uUpAxis");
             BaseColor = Find(gl, program, "uBaseColor");
             Metallic = Find(gl, program, "uMetallic");
             Roughness = Find(gl, program, "uRoughness");
             Emissive = Find(gl, program, "uEmissive");
             Tex = Find(gl, program, "uTex");
             HasTex = Find(gl, program, "uHasTex");
+            NormalTex = Find(gl, program, "uNormalTex");
+            HasNormalMap = Find(gl, program, "uHasNormalMap");
             HasVertexColor = Find(gl, program, "uHasVertexColor");
             AlphaMode = Find(gl, program, "uAlphaMode");
             AlphaCutoff = Find(gl, program, "uAlphaCutoff");
@@ -512,7 +572,7 @@ public sealed unsafe class GlRenderer : IDisposable
     {
         internal uint Vao, Vertices, Indices, Edges;
         internal int IndexCount, EdgeCount;
-        internal bool HasColor;
+        internal bool HasColor, HasTangents;
 
         internal void Delete(GlApi gl)
         {

@@ -51,8 +51,14 @@ public sealed class Scene
     /// <summary>Surfaces, referenced by <see cref="Node.Material"/>.</summary>
     public IReadOnlyList<Material> Materials { get; init; } = [];
 
-    /// <summary>Textures, referenced by <see cref="Material.BaseColorTexture"/> and friends.</summary>
+    /// <summary>Decoded images. Referenced by <see cref="Textures"/>, not by materials directly —
+    /// the same image may be sampled two different ways in one file.</summary>
     public IReadOnlyList<ImageData> Images { get; init; } = [];
+
+    /// <summary>Image-and-sampler pairings, referenced by <see cref="Material.BaseColorTexture"/>
+    /// and friends. See <see cref="TextureRef"/> for why the sampler is not a property of the
+    /// image.</summary>
+    public IReadOnlyList<TextureRef> Textures { get; init; } = [];
 
     /// <summary>Top-level nodes.</summary>
     public IReadOnlyList<Node> Roots { get; init; } = [];

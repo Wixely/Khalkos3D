@@ -45,7 +45,9 @@ public sealed unsafe class GlApi
     internal const uint COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82;
     internal const uint TEX_MIN_FILTER = 0x2801, TEX_MAG_FILTER = 0x2800;
     internal const uint TEX_WRAP_S = 0x2802, TEX_WRAP_T = 0x2803;
-    internal const int LINEAR = 0x2601, LINEAR_MIPMAP_LINEAR = 0x2703, REPEAT = 0x2901;
+    internal const int LINEAR = 0x2601, NEAREST = 0x2600;
+    internal const int LINEAR_MIPMAP_LINEAR = 0x2703, NEAREST_MIPMAP_LINEAR = 0x2702;
+    internal const int REPEAT = 0x2901, CLAMP_TO_EDGE = 0x812F, MIRRORED_REPEAT = 0x8370;
     internal const uint FRAMEBUFFER = 0x8D40, RENDERBUFFER = 0x8D41;
     internal const uint COLOR_ATTACHMENT0 = 0x8CE0, DEPTH_ATTACHMENT = 0x8D00;
     internal const uint DEPTH_COMPONENT24 = 0x81A6, FRAMEBUFFER_COMPLETE = 0x8CD5;

@@ -162,11 +162,34 @@ cross-section against an arbitrary plane, per-triangle colours from 3MF colour g
 display — `PrimitiveKind.Lines` is already in the model for exactly this, so a G-code preview is a
 parser plus a line renderer rather than an architecture change.
 
-### M4 · Textures and environment — **1 week**
+### M4 · Textures and environment — **done**
 
-Wire the image-decoder seam, sampler state, mipmaps, and a small prefiltered environment so metals
-have something to reflect. Without it every metallic material renders near-black, which is correct
-and looks broken.
+`TextureRef` with per-texture sampler state, glTF `samplers` honoured, mipmaps, tangent generation,
+normal mapping, and an `Environment`.
+
+**The environment is a three-colour gradient, not an image, and that is the interesting choice.** A
+metallic surface has no diffuse colour at all — everything visible on chrome is a reflection — so with
+nothing around it, physically correct rendering produces near-black and every user reads that as a
+broken shader. A real prefiltered cubemap would need an HDR decoder, a precomputation step, an asset
+to ship and a per-platform texture format. A sky/horizon/ground gradient sampled by direction needs
+none of those, is identical on all six targets, and costs a few instructions. Measured: a chrome box
+goes from `rgba(6,6,6)` to `rgba(124,125,127)`.
+
+**Sampler state is where a known failure was pre-empted rather than rediscovered.** A texture authored
+to tile but sampled with clamping does not look like a wrapping bug — it looks like a broken UV
+unwrap, with one stretched edge texel smeared across most of the model, and nothing errors. So
+`TextureRef` pairs an image with its sampler (glTF's own model, because one image can be sampled two
+ways in one file), and a render test asserts that repeating and clamping actually differ on screen.
+
+Tangents are derived when a normal map needs one and the file did not supply it, with the handedness
+sign kept — without it, the mirrored half of a symmetric model has its surface detail punched in
+rather than raised. A normal map is ignored rather than applied when no tangent frame exists, because
+applying it against an arbitrary basis makes the lighting swim as the model turns.
+
+**This is the point of parity with CupriFace's `Demo3d`**, which was the gate on the glue: a textured
+glTF model under a metallic-roughness shader. The one thing a consumer must still supply is
+`GltfOptions.DecodeImage` — see [LICENSING.md](LICENSING.md) for why no codec is bundled. A CupriFace
+app has SkiaSharp, so that is four lines.
 
 ### M5 · Animation — **reassess before starting**
 
