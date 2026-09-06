@@ -2,8 +2,9 @@ using System.Numerics;
 
 namespace Khalkos3D;
 
-/// <summary>What the indices describe. Only triangles are rendered today; the others exist so a
-/// loader can carry what a file actually contained rather than silently converting it.</summary>
+/// <summary>What the indices describe. All three draw: the GL renderer maps them to GL_TRIANGLES,
+/// GL_LINES and GL_POINTS, which is what lets <see cref="Shapes"/> build a ground grid out of line
+/// segments rather than out of very thin quads.</summary>
 public enum PrimitiveKind
 {
     /// <summary>Every three indices are one triangle.</summary>

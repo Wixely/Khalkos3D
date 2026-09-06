@@ -200,6 +200,51 @@ jobs:
           fi
           echo "ok: the asset layer links for browser-wasm"
 
+  androiddemo:
+    name: The demo builds for Android, and comes out installable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install the Android workload
+        run: dotnet workload install android --skip-manifest-update
+
+      # ITS OWN JOB, AND NOT IN THE SOLUTION. Everything in Khalkos3D.slnx is built by the test job
+      # on three operating systems; an android project there would make that build demand this
+      # workload on all three or fail with NETSDK1147 before compiling a line. So the Android app
+      # sits outside the solution and is built here, which is also the only job that pays for the
+      # workload install.
+      #
+      # PUBLISHED rather than built, because the artifact below is meant to be installable on a real
+      # phone. Signed with a CI debug key that changes per build, so uninstall any previous copy
+      # before sideloading a new one or Android refuses it as a signature mismatch.
+      - name: Publish
+        run: dotnet publish samples/Khalkos3D.AndroidDemo/Khalkos3D.AndroidDemo.csproj -c Release -r android-arm64 -o out
+
+      # An APK that builds and an APK you can install are different claims. The publish emits
+      # both a signed and an unsigned package, and only the signed one will install — so that is
+      # what is asserted on and the only one uploaded. An artifact holding both leaves whoever
+      # downloads it guessing which to sideload.
+      - name: There is a signed APK
+        run: |
+          set -euo pipefail
+          echo "--- out ---"
+          find out -maxdepth 1 -name '*.apk' -printf '%f  %s bytes\n' | sort
+          if [ -z "$(find out -maxdepth 1 -name '*-Signed.apk' -print -quit)" ]; then
+            echo "::error::the Android publish produced no signed .apk"
+            find out -maxdepth 1 -type f -printf '%f\n' | sort | head -30
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khalkos3d-demo-android-arm64
+          path: out/*-Signed.apk
+          if-no-files-found: error
+
   pack:
     name: The libraries pack, and carry what they promise
     runs-on: ubuntu-latest

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The demo, minus the window.
+
+       DELIBERATELY A LIBRARY WITH NO HOST IN IT. The desktop and Android apps both reference this
+       and add only what a platform actually forces them to add: a window, an input source, a swap.
+       Splitting it this way is not tidiness — it is the claim being demonstrated. An engine that
+       says most of a 3D application can be written once should be able to show a 3D application
+       most of which is written once.
+
+       It takes the same three project references a consumer would take as packages, and nothing
+       else. No windowing library, no image codec: this half runs anywhere the engine does,
+       including on browser wasm, which is why the hosts and not the shared code carry the
+       per-platform dependencies. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Khalkos3D.Core/Khalkos3D.Core.csproj" />
+    <ProjectReference Include="../../src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
+    <ProjectReference Include="../../src/Khalkos3D.Gl/Khalkos3D.Gl.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Android app.
+
+       IT REFERENCES THE SAME Khalkos3D.Demo THE DESKTOP APP DOES, and adds an activity, a
+       GLSurfaceView and touch handling. That is the demonstration: the scene, the camera, the
+       lighting and the debug views are compiled once for both.
+
+       No windowing package and no image codec — Android supplies the context, and the engine
+       resolves GLES entry points from libGLESv3.so through the BCL's NativeLibrary. The APK
+       therefore carries the engine and nothing else. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+
+    <!-- 24 is the floor for GLES 3.0 being universally present; the engine needs nothing newer. -->
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.khalkos3d.demo</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Khalkos3D.Demo/Khalkos3D.Demo.csproj" />
+  </ItemGroup>
+
+</Project>

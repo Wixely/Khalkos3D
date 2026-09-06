@@ -129,6 +129,50 @@ their file is broken when it is not. Where a feature changes how the *bytes* are
 meshopt, quantisation — loading **throws** instead, because a half-decoded mesh is not a degraded
 result but a wrong one.
 
+## The demo
+
+A standalone viewer for Windows, Linux, macOS and Android.
+
+```
+dotnet run --project samples/Khalkos3D.DesktopDemo              # the built-in scene
+dotnet run --project samples/Khalkos3D.DesktopDemo -- model.glb # or any file it reads
+```
+
+Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. **W** wireframe, **N** normals,
+**B** highlight back-faces, **R** reset the view. On Android the same gestures apply: one finger
+orbits, two pinch and pan.
+
+The default scene is two rows of spheres sweeping roughness — metal above, dielectric below — and a
+box, on a grid. It is chosen because it **fails visibly**: a single cube looks right under almost any
+broken shader, whereas if the lighting maths is wrong the row stops varying, if the environment is
+missing the metals go black, and if normals are inverted everything lights from the wrong side. One
+screen tells you whether the renderer works on your machine.
+
+Both solids are generated in code and come out as closed manifolds — `MeshAnalysis` will confirm it.
+A sample for an engine that ships a watertightness check should not hand it geometry that fails.
+
+### Where the code lives, which is the point
+
+| | |
+|---|---|
+| `samples/Khalkos3D.Demo` | The scene, the camera, the lighting, the debug views, the gesture arithmetic. No window, no windowing library, no image codec. |
+| `samples/Khalkos3D.DesktopDemo` | A Silk.NET window, a mouse and a keyboard. |
+| `samples/Khalkos3D.AndroidDemo` | An activity, a `GLSurfaceView`, and touch. |
+
+The shared project is the large one and the hosts are thin, which is the claim being demonstrated
+rather than a tidiness preference. Android contributes about fifteen lines of real platform code:
+`NativeLibrary.TryLoad("libGLESv3.so")` and exported-symbol lookup, deliberately **not**
+`eglGetProcAddress` — some drivers return a non-null stub for any name asked of it, which makes a
+missing entry point look present and then crash on the call.
+
+Silk.NET is a *sample* dependency. Nothing under `src/` references it, which the `dependencies` CI
+job asserts on every run — that is what lets the engine be driven from a host that already owns its
+own window.
+
+An installable arm64 APK is built on every CI run and attached to it as an artifact. It is signed
+with a debug key that changes per build, so uninstall any previous copy before sideloading a new one
+or Android will refuse it as a signature mismatch.
+
 ## Licensing
 
 MIT, and it intends to stay that way. Dependencies are held to a policy: permissive only, nothing
@@ -145,11 +189,13 @@ over a proc-address function and a size, which is exactly what `GlRenderer` want
 about thirty lines.
 
 **Neither library depends on the other, and the glue lives in CupriFace's repository rather than
-here** — a general-purpose engine depending on a UI toolkit would invert the direction. It also
-waits: not for the renderer to draw *something*, but for parity with CupriFace's existing `Demo3d`,
-which is a textured glTF model under a metallic-roughness shader composited behind live UI on three
-hosts. Replacing a working demo with a worse one is not progress. See
-[the plan](docs/PLAN.md#cupriface).
+here** — a general-purpose engine depending on a UI toolkit would invert the direction.
+
+It shipped: CupriFace's Showcase now draws its 3D viewport through this engine on all three of its
+hosts, referencing it as a package. Each of the three lanes is evidenced on a different driver —
+zero-copy shared-texture on desktop GL, GLES 3.0 through the Android device gate, and WebGL2 in
+Chromium — with the engine and the toolkit independently parsing `GL_VERSION` and agreeing on the
+dialect every time. See [the plan](docs/PLAN.md#cupriface).
 
 ## Building
 

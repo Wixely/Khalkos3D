@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Windows, Linux and macOS from one project, because Silk.NET's GLFW backend already abstracts
+       the three and the engine needs nothing from a window but a proc-address function.
+
+       SILK.NET IS A SAMPLE DEPENDENCY, NOT AN ENGINE ONE. Nothing under src/ references it, which
+       the `dependencies` CI job asserts on every run. That is the whole reason the engine can be
+       used from a host that has its own window already — a game framework, or a UI toolkit — rather
+       than obliging every consumer to adopt this one. It is MIT, like everything else here. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>khalkos3d-demo</AssemblyName>
+    <RootNamespace>Khalkos3D.DesktopDemo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Input" Version="2.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Khalkos3D.Demo/Khalkos3D.Demo.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -34,7 +34,7 @@ public sealed class GlFixture : IDisposable
             {
                 Size = new(1, 1),
                 IsVisible = false,
-                Title = "stannumfab-tests",
+                Title = "khalkos3d-tests",
                 API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core,
                                       ContextFlags.Default, new APIVersion(3, 3)),
             };
