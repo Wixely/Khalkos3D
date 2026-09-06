@@ -8,7 +8,7 @@ namespace Khalkos3D.Formats;
 /// <summary>
 /// Reads glTF 2.0 and its binary container GLB — the interchange format everything modern speaks.
 ///
-/// <para>Where STL and 3MF describe a thing to print, glTF describes a thing to look at: a node
+/// <para>Where STL and 3MF describe a thing to fabricate, glTF describes a thing to look at: a node
 /// hierarchy, PBR materials, textures, cameras, animation and skinning. This reader takes the
 /// static half of that, which is the half a viewer needs, and is explicit about the rest.</para>
 ///

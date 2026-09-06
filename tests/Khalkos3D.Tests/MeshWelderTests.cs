@@ -4,9 +4,8 @@ using Xunit;
 namespace Khalkos3D.Tests;
 
 /// <summary>
-/// Welding, which is the piece of core code the 3D-printing case actually depends on: an STL has no
-/// shared vertices at all, so everything downstream — memory, upload time, vertex shading — is
-/// decided here.
+/// Welding, which every format that stores triangle soup depends on: an STL has no shared vertices
+/// at all, so everything downstream — memory, upload time, vertex shading — is decided here.
 /// </summary>
 public class MeshWelderTests
 {

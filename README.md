@@ -16,9 +16,9 @@ if (scene.Report.Summary is { } warning) Console.WriteLine(warning);
 
 ## What it is
 
-An engine for **basic 3D that has to run everywhere**: print previews, simple viewers, light
-animation. Windows, Linux, macOS, Android, iOS and the browser, from one codebase and one shader
-source.
+An engine for **basic 3D that has to run everywhere**: model viewers, inspection tools, light
+animation, anything that needs geometry on screen inside an application. Windows, Linux, macOS,
+Android, iOS and the browser, from one codebase and one shader source.
 
 It is deliberately not a game engine. There is no ECS, no physics, no editor, no asset pipeline. If
 you need those, Godot and Stride are excellent and free. This is for the case where you want a model
@@ -52,32 +52,38 @@ view.Orbit(dx / width, dy / height);
 view.Zoom(wheelTicks);
 ```
 
-Plus the scenery a viewer needs — a ground grid, a printer build plate and an RGB axis marker — and
-the debug views that make a bad mesh obvious: wireframe, normals, and **backface highlighting**,
-which matters because the shader deliberately flips normals towards the viewer so an inverted facet
-does not appear as a black hole in a part your slicer would print fine. That kindness hides the
-defect; this is how you see it.
+Plus the scenery a viewer needs — a ground grid, a bounded work area and an RGB axis marker — and the
+debug views that make a bad mesh obvious: wireframe, normals, and **backface highlighting**, which
+matters because the shader deliberately flips normals towards the viewer so an inverted facet does not
+appear as a black hole in geometry that is otherwise fine. That kindness hides the defect; this is how
+you see it.
 
-### It tells you whether a model will print
+### It tells you what a mesh actually is
 
 ```csharp
 var report = MeshAnalysis.Analyse(scene);
 Console.WriteLine(report);
-// 4,032 triangles, 0.1 x 0.05 x 0.06, 128 open edges (holes)
+// 4,032 triangles, 0.1 x 0.05 x 0.06, 128 boundary edges
 
-if (MeshAnalysis.ExceedsBuildVolume(scene.Bounds, new Vector3(220, 220, 250)) is { } tooBig)
+if (MeshAnalysis.ExceedsLimits(scene.Bounds, new Vector3(220, 220, 250)) is { } tooBig)
     Console.WriteLine(tooBig);
 ```
 
-Volume, surface area, and the four ways a mesh fails a slicer: open edges, non-manifold edges,
-inconsistent winding, and being wound inside out — that last one detected from the *sign* of the
-volume, because an inverted mesh is perfectly watertight and looks correct from outside.
+Volume, surface area, and whether the surface is a **closed, consistently oriented manifold** — the
+property that volume, inside/outside tests, boolean operations and offsetting all quietly assume.
+When it is not, you get which of the three irregularities applies: boundary edges, non-manifold
+edges, or inconsistent winding. Plus inversion, detected from the *sign* of the volume, because an
+inverted mesh is a perfectly good closed manifold and looks correct from outside.
+
+It is a diagnostic, not a judgement: an open surface is a defect in something meant to enclose a
+volume and completely correct in a terrain or a cloth, so it reports what the geometry **is** and
+leaves the meaning to you.
 
 Topology is computed on positions rather than indices, which matters more than it sounds: a
 render-ready mesh has extra vertices at every hard edge, so matching by index would report every edge
-of a sound cube as a hole.
+of a sound cube as a boundary.
 
-**Cross-section** cuts through a part so you can see walls and infill —
+**Cross-section** cuts through a model so you can see wall thickness and internal structure —
 `bounds.SectionAt(direction, 0.5f)` gives a plane a slider can drive without knowing the model's
 scale.
 
@@ -101,7 +107,7 @@ Scene whatever    = ModelReader.ReadFile("mystery.dat");   // sniffed from the b
 ### Three things it does that most loaders do not
 
 **Welding that keeps corners sharp.** An STL has no shared vertices — a box arrives as 36 vertices
-rather than 8, and a million-triangle print as three million. Welding them naively then averaging
+rather than 8, and a million-triangle model as three million. Welding them naively then averaging
 the normals rounds off every corner, which is exactly wrong for mechanical parts. So the merge is
 conditional on the angle between the faces: a box stays faceted, a tessellated cylinder goes smooth,
 one pass and no per-model tuning.

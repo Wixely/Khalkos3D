@@ -127,7 +127,7 @@ public static class ModelReader
     {
         using var stream = File.OpenRead(path);
         // Enough for every magic number and for the text sniffs. Detect never uses the buffer's
-        // LENGTH as a fact about the file, which is what lets a fixed peek work on a 2 GB print.
+        // LENGTH as a fact about the file, which is what lets a fixed peek work on a 2 GB mesh.
         var buffer = new byte[(int)Math.Min(512, stream.Length)];
         stream.ReadExactly(buffer);
         return buffer;

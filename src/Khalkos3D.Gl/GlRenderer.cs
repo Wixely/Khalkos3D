@@ -305,7 +305,7 @@ public sealed unsafe class GlRenderer : IDisposable
 
         // Interleaved into ONE buffer rather than one per channel. A vertex is fetched as a unit, so
         // separate arrays cost an extra cache line per attribute per vertex — which on a
-        // million-triangle print is the difference between a smooth orbit and a stuttering one. The
+        // million-triangle model is the difference between a smooth orbit and a stuttering one. The
         // packing happens once, at upload, not per frame.
         var floats = 3 + (hasNormal ? 3 : 0) + (hasUv ? 2 : 0) + (hasColor ? 4 : 0) + (hasTangent ? 4 : 0);
         var stride = floats * sizeof(float);

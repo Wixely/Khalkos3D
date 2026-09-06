@@ -4,8 +4,8 @@ namespace Khalkos3D.Gl;
 /// A framebuffer to render into when there is no window — and the thing that makes this renderer
 /// testable at all.
 ///
-/// <para>Two real uses beyond tests: generating a thumbnail of a print file on a server that has no
-/// display, and rendering into a texture that some other UI toolkit then composites. Both are
+/// <para>Two real uses beyond tests: generating a thumbnail on a server that has no display, and
+/// rendering into a texture that some other UI toolkit then composites. Both are
 /// ordinary, and neither is served by a renderer that can only draw to a window.</para>
 ///
 /// <para>Still creates no CONTEXT — that remains the host's job. This only allocates a colour texture

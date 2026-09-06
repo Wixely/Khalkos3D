@@ -5,10 +5,10 @@ namespace Khalkos3D;
 /// <summary>
 /// Which way is up in a file's own coordinates.
 ///
-/// <para><b>The formats genuinely disagree, and a viewer that ignores it lays every printed part on
-/// its side.</b> glTF specifies Y-up. CAD and 3D printing are Z-up by universal convention — an STL
-/// or a 3MF out of any slicer or CAD package has the build plate in XY and height along Z. OBJ is
-/// usually Y-up because it comes from content tools.</para>
+/// <para><b>The formats genuinely disagree, and a viewer that ignores it lays models on their
+/// side.</b> glTF specifies Y-up. CAD and engineering tools are Z-up by long convention, so an STL or
+/// a 3MF out of one has its ground plane in XY and height along Z. OBJ is usually Y-up, because it
+/// comes from content-authoring tools instead.</para>
 ///
 /// <para>Nothing here rotates the geometry. The mesh stays exactly as the file wrote it, which is
 /// what makes a round trip lossless; only the CAMERA is told which axis points up, so the default
@@ -18,7 +18,7 @@ public enum UpAxis
 {
     /// <summary>Y is up. glTF, and most content-authoring tools.</summary>
     Y,
-    /// <summary>Z is up. CAD, 3D printing, and every slicer.</summary>
+    /// <summary>Z is up. CAD and engineering tools.</summary>
     Z,
 }
 
@@ -62,7 +62,7 @@ public readonly record struct Camera(
     /// centre at the given angles.
     ///
     /// <para><b>The near and far planes are derived from the model, not fixed.</b> A constant pair
-    /// has to span everything from a 5 mm printed clip to a 300 m terrain, and no pair does: too near
+    /// has to span everything from a 5 mm component to a 300 m terrain, and no pair does: too near
     /// a near plane wrecks depth precision and the model self-stripes, too far and the front of it is
     /// clipped away. Deriving them from the radius makes depth precision the same for a bracket and
     /// for a building, which is exactly the kind of thing "unified experience" has to mean.</para>

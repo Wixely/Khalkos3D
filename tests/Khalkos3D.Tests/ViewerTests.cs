@@ -115,8 +115,8 @@ public class ViewerTests
     [Fact]
     public void The_controller_takes_its_up_axis_from_the_scene()
     {
-        // So a caller cannot forget: an STL is Z-up, and a viewer that assumed otherwise lays every
-        // printed part on its side.
+        // So a caller cannot forget: an STL is Z-up, and a viewer that assumed otherwise lays such
+        // models on their side.
         var scene = Scene.FromMesh(
             MeshWelder.FromTriangleSoup(TestShapes.Box(new Vector3(10, 10, 10)), out _), up: UpAxis.Z);
 
@@ -146,15 +146,15 @@ public class ViewerTests
     }
 
     [Fact]
-    public void A_build_plate_puts_its_origin_where_the_printer_does()
+    public void A_platform_can_put_its_origin_at_a_corner_or_in_the_middle()
     {
-        // Not cosmetic: a part positioned against the wrong origin looks off the bed when it is not,
-        // and most printers put theirs at the front-left corner rather than the middle.
-        var corner = Shapes.BuildPlate(220f, 210f, 10f, UpAxis.Z, centred: false);
+        // Not cosmetic: an object positioned against the wrong origin appears outside a region it is
+        // actually inside, and machine coordinate systems differ on which convention they use.
+        var corner = Shapes.Platform(220f, 210f, 10f, UpAxis.Z, centred: false);
         Assert.Equal(new Vector3(0, 0, 0), corner.Bounds.Min);
         Assert.Equal(new Vector3(220, 210, 0), corner.Bounds.Max);
 
-        var centred = Shapes.BuildPlate(220f, 210f, 10f, UpAxis.Z, centred: true);
+        var centred = Shapes.Platform(220f, 210f, 10f, UpAxis.Z, centred: true);
         Assert.Equal(new Vector3(-110, -105, 0), centred.Bounds.Min);
         Assert.Equal(new Vector3(110, 105, 0), centred.Bounds.Max);
     }
@@ -174,9 +174,9 @@ public class ViewerTests
     }
 
     [Theory]
-    [InlineData(0.005f)]    // a tiny printed clip
+    [InlineData(0.005f)]    // a tiny component
     [InlineData(1f)]
-    [InlineData(220f)]      // a printer bed
+    [InlineData(220f)]      // a work area
     [InlineData(300f)]      // a building
     public void Scenery_sized_to_a_model_uses_a_readable_step(float size)
     {
@@ -218,6 +218,6 @@ public class ViewerTests
         Assert.True(tiny.Positions.Length < 10_000, $"{tiny.Positions.Length} vertices is a hung upload");
 
         Assert.Null(Shapes.Grid(float.NaN, float.NaN, UpAxis.Z).Validate());
-        Assert.Null(Shapes.BuildPlate(0f, -5f, 0f).Validate());
+        Assert.Null(Shapes.Platform(0f, -5f, 0f).Validate());
     }
 }

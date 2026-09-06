@@ -5,8 +5,8 @@ namespace Khalkos3D;
 /// <summary>
 /// One thing to draw: a transform, optionally a mesh, and children.
 ///
-/// <para>Flat files use one of these and stop. glTF uses a tree, and the tree matters — a printer
-/// plate holding six copies of a part is six nodes sharing one mesh, which is the difference between
+/// <para>Flat files use one of these and stop. glTF uses a tree, and the tree matters — a scene
+/// holding six copies of one object is six nodes sharing one mesh, which is the difference between
 /// uploading the geometry once and uploading it six times.</para>
 /// </summary>
 public sealed class Node
@@ -71,9 +71,9 @@ public sealed class Scene
     /// Which axis this file treats as up, as its FORMAT defines it rather than as anything in the
     /// geometry says.
     ///
-    /// <para>Carried because the formats disagree and a viewer that ignores it lays every printed
-    /// part on its side: glTF is Y-up, while STL and 3MF are Z-up by the universal convention of CAD
-    /// and slicing. Nothing is rotated to match — the mesh stays exactly as written, which is what
+    /// <para>Carried because the formats disagree and a viewer that ignores it lays models on their
+    /// side: glTF is Y-up, while STL and 3MF are Z-up by the long convention of CAD and engineering
+    /// tools. Nothing is rotated to match — the mesh stays exactly as written, which is what
     /// keeps a round trip lossless — but <see cref="Camera.Frame"/> reads this so the default view is
     /// the one the author intended.</para>
     /// </summary>

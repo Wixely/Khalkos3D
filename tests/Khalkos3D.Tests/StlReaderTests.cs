@@ -159,7 +159,7 @@ public class StlReaderTests
     [Fact]
     public void The_report_says_the_material_was_invented()
     {
-        // STL stores no material. A user comparing this viewport against their slicer deserves to
+        // STL stores no material. Anyone comparing this viewport against another tool deserves to
         // know the colour they are looking at is ours.
         var scene = Read(TestShapes.BinaryStl(TestShapes.Box(Vector3.One)));
 

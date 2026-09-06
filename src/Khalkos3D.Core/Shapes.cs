@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Khalkos3D;
 
 /// <summary>
-/// The scenery a viewer draws around a model: a ground grid, a printer's build plate, and the axis
+/// The scenery a viewer draws around a model: a ground grid, a bounded work area, and the axis
 /// marker that says which way is which.
 ///
 /// <para><b>Ordinary meshes, not a special case in the renderer.</b> They come out as
@@ -12,8 +12,8 @@ namespace Khalkos3D;
 /// "draw the grid" path would need that path on every future backend, and would drift from the one
 /// that draws everything else.</para>
 ///
-/// <para>All of them respect the up axis, because a build plate lying in the wrong plane is worse
-/// than no build plate.</para>
+/// <para>All of them respect the up axis, because a ground plane standing on its side is worse than
+/// no ground plane.</para>
 /// </summary>
 public static class Shapes
 {
@@ -71,17 +71,21 @@ public static class Shapes
     }
 
     /// <summary>
-    /// A printer's build plate: the bed outline plus a grid inside it.
+    /// A bounded work area: a rectangular outline with a grid inside it.
+    ///
+    /// <para>Whatever the caller's bounded region is — a machine's working area, a table, a level's
+    /// playable extent. The outline is drawn brighter than the grid because it is the constraint
+    /// being checked against.</para>
     /// </summary>
-    /// <param name="width">Bed size along the first ground axis, in the model's own units.</param>
-    /// <param name="depth">Bed size along the second.</param>
-    /// <param name="spacing">Grid spacing. 10 mm is the convention every slicer uses.</param>
+    /// <param name="width">Extent along the first ground axis, in the model's own units.</param>
+    /// <param name="depth">Extent along the second.</param>
+    /// <param name="spacing">Grid spacing.</param>
     /// <param name="up">Which axis is up.</param>
-    /// <param name="centred">True puts the origin in the middle of the bed; false puts it at the
-    /// front-left corner, which is where most printers put theirs. It matters: a part positioned
-    /// against the wrong origin looks off the bed when it is not.</param>
-    public static Mesh BuildPlate(float width, float depth, float spacing = 10f,
-                                  UpAxis up = UpAxis.Z, bool centred = false)
+    /// <param name="centred">True puts the origin in the middle of the area; false puts it at a
+    /// corner. It matters: an object positioned against the wrong origin appears outside a region it
+    /// is actually inside.</param>
+    public static Mesh Platform(float width, float depth, float spacing = 10f,
+                                UpAxis up = UpAxis.Z, bool centred = false)
     {
         if (width <= 0f || !float.IsFinite(width)) width = 220f;
         if (depth <= 0f || !float.IsFinite(depth)) depth = 220f;
@@ -104,14 +108,14 @@ public static class Shapes
         for (var y = minY + spacing; y < maxY - 1e-4f; y += spacing)
             AddLine(InPlane(minX, y, up), InPlane(maxX, y, up), grid);
 
-        // The outline last and brighter: it is the constraint a user is actually checking against,
-        // so it should not be lost among the grid lines.
+        // The outline last and brighter: it is the constraint being checked against, so it should
+        // not be lost among the grid lines.
         AddLine(InPlane(minX, minY, up), InPlane(maxX, minY, up), edge);
         AddLine(InPlane(maxX, minY, up), InPlane(maxX, maxY, up), edge);
         AddLine(InPlane(maxX, maxY, up), InPlane(minX, maxY, up), edge);
         AddLine(InPlane(minX, maxY, up), InPlane(minX, minY, up), edge);
 
-        return Lines([.. positions], [.. colors], "build plate");
+        return Lines([.. positions], [.. colors], "platform");
 
         void AddLine(Vector3 a, Vector3 b, Vector4 colour)
         {
@@ -147,8 +151,8 @@ public static class Shapes
     /// <summary>
     /// A grid and axes sized to a model, which is what a viewer wants without being asked.
     ///
-    /// <para>Sized from the model rather than fixed: a 5 mm printed clip and a 300 m terrain both
-    /// need a grid, and one spacing cannot serve both. The step is rounded to a 1-2-5 sequence, which
+    /// <para>Sized from the model rather than fixed: a 5 mm component and a 300 m terrain both need
+    /// a grid, and one spacing cannot serve both. The step is rounded to a 1-2-5 sequence, which
     /// is what makes the numbers readable — 10 and 20 and 50, never 13.7.</para>
     /// </summary>
     public static (Mesh Grid, Mesh Axes) For(BoundingBox bounds, UpAxis up)

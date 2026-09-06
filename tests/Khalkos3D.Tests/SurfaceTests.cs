@@ -205,8 +205,8 @@ public class SurfaceTests
     [Fact]
     public void The_gradient_runs_along_whichever_axis_is_up()
     {
-        // A Z-up printed part lit by a Y-up gradient is lit from the side, which looks like a lamp in
-        // the wrong place rather than like a wrong setting.
+        // A Z-up model lit by a Y-up gradient is lit from the side, which looks like a lamp in the
+        // wrong place rather than like a wrong setting.
         var environment = Environment.Studio;
 
         Assert.Equal(environment.Sample(Vector3.UnitY, UpAxis.Y), environment.Sample(Vector3.UnitZ, UpAxis.Z));

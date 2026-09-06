@@ -8,8 +8,8 @@ namespace Khalkos3D.Formats;
 /// <summary>
 /// Reads STL, in both of its forms, and produces an indexed mesh.
 ///
-/// <para><b>The format that 3D printing actually runs on, and it is barely a format.</b> An STL is a
-/// list of triangles. No units, no scene, no materials, no shared vertices, no way to say which way
+/// <para><b>The most widely exchanged mesh format there is, and barely a format at all.</b> An STL
+/// is a list of triangles. No units, no scene, no materials, no shared vertices, no way to say which way
 /// is up. Everything this reader does beyond parsing exists to make up for one of those gaps.</para>
 ///
 /// <para><b>Telling ASCII from binary is the first real problem, and the naive test is wrong.</b>
@@ -53,10 +53,10 @@ public static class StlReader
         if (mesh.Validate() is { } bad) throw new ModelFormatException($"the STL produced an invalid mesh: {bad}");
 
         // STL carries no material at all, so one is invented — and said so, because a user comparing
-        // this against their slicer's preview deserves to know the colour is ours and not theirs.
+        // this against another tool's view deserves to know the colour is ours and not theirs.
         report.Info("material", "STL stores no material; a neutral default was used");
-        // Z-up: STL says nothing about orientation, but every CAD package and slicer that writes one
-        // puts the build plate in XY. Assuming Y-up here would stand each part on its side.
+        // Z-up: STL says nothing about orientation, but the CAD and engineering tools that write it
+        // put the ground plane in XY. Assuming Y-up here would stand every model on its side.
         return Scene.FromMesh(mesh, options.Material, report.Build(), UpAxis.Z);
     }
 

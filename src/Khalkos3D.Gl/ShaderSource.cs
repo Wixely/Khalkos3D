@@ -45,8 +45,8 @@ internal static class ShaderSource
             vec4 world = uModel * vec4(aPos, 1.0);
             vWorld = world.xyz;
             // The INVERSE TRANSPOSE, not the model matrix. They agree only while the transform is a
-            // rigid motion; the moment a node carries a non-uniform scale — which a printer plate
-            // holding a stretched part routinely does — using the model matrix tilts every normal and
+            // rigid motion; the moment a node carries a non-uniform scale — which an instanced,
+            // stretched copy routinely does — using the model matrix tilts every normal and
             // the lighting slides across the surface as it rotates.
             vNormal = mat3(uNormalMatrix) * aNormal;
             // The handedness in w survives the transform untouched: it is a sign, not a direction.
@@ -113,7 +113,7 @@ internal static class ShaderSource
 
             if (uAlphaMode == 1 && base.a < uAlphaCutoff) discard;
 
-            // Scenery — a grid, a build plate, an axis marker — has no meaningful normal, so lighting
+            // Scenery — a grid, a work area, an axis marker — has no meaningful normal, so lighting
             // it makes lines dim on one side of the model and bright on the other. Straight out, no
             // tone mapping: an unlit colour is a colour, not a luminance to be compressed.
             if (uUnlit == 1) {
@@ -155,7 +155,7 @@ internal static class ShaderSource
             }
 
             // Two-sided shading, and it is not optional for this engine's first use case: real STL
-            // files routinely contain inverted facets, and a slicer prints them fine. Flipping the
+            // files routinely contain inverted facets that no other tool objects to. Flipping the
             // normal towards the viewer means such a facet shades like its neighbours instead of
             // appearing as a black hole in an otherwise valid part.
             if (dot(N, V) < 0.0) N = -N;

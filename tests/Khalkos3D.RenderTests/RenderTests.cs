@@ -123,7 +123,7 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
     [Fact]
     public void An_inverted_facet_still_shades_instead_of_going_black()
     {
-        // Real STL files contain reversed triangles constantly and slicers print them fine, so a
+        // Real STL files contain reversed triangles constantly and no other tool objects, so a
         // viewer that renders them as black holes is reporting its own limitation as the user's bug.
         // The shader flips the normal towards the viewer for exactly this.
         var corners = TestBox.Corners(new Vector3(10, 10, 10));
@@ -211,7 +211,7 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
     public void Backfaces_are_highlighted_so_an_inverted_facet_can_be_found()
     {
         // The counterpart to the shader flipping normals towards the viewer. That flip is what stops
-        // an inverted facet appearing as a black hole in a part the slicer would print fine — and it
+        // an inverted facet appearing as a black hole in geometry that is otherwise fine — and it
         // also HIDES the inversion, so this is the switch that shows it.
         var corners = TestBox.Corners(new Vector3(10, 10, 10));
         for (var i = 0; i + 2 < corners.Length; i += 3)
@@ -263,8 +263,8 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
     [Fact]
     public void The_environment_gradient_follows_the_up_axis()
     {
-        // A Z-up printed part lit by a Y-up gradient is lit from the side, which looks like a lamp in
-        // the wrong place rather than like a wrong setting — so the shader is told which axis is up
+        // A Z-up model lit by a Y-up gradient is lit from the side, which looks like a lamp in the
+        // wrong place rather than like a wrong setting — so the shader is told which axis is up
         // rather than assuming one.
         var chrome = new Material { BaseColor = Vector4.One, Metallic = 1f, Roughness = 0.2f };
         var scene = Box(new Vector3(10, 10, 10), chrome);
@@ -408,9 +408,9 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
     [Fact]
     public void A_section_cuts_the_model_and_shows_its_interior()
     {
-        // The printing question this answers: are the walls where I think they are, and is that boss
-        // solid? Half the box is discarded, and what shows through is the inside of the far wall -
-        // painted flat, so the cut reads as a surface rather than as a hole.
+        // What a section is for: how thick is that wall, and is the inside what I expected? Half the
+        // box is discarded, and what shows through is the inside of the far wall - painted flat, so
+        // the cut reads as a surface rather than as a hole.
         var scene = Box(new Vector3(10, 10, 10), Red);
         var whole = Render(scene);
 

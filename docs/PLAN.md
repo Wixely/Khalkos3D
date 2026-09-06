@@ -15,9 +15,11 @@ is getting *the same model, looking the same, on a desktop, a phone and a web pa
 this optimises for. Where unified behaviour and peak performance disagree, unified wins; where the
 gap becomes large enough to matter, the backend seam is where it gets fixed, not the API.
 
-**Target uses, in the order they are worth doing:** 3D-print preview (STL, 3MF, units, build plate),
-simple model viewers, then very basic animation and games. A game framework is explicitly later, and
-explicitly a separate decision.
+**Target uses:** model viewers and inspection tools, then very basic animation and games. The
+motivating case was previewing fabrication geometry — STL, 3MF, units, a bounded work area — but that
+is one application of a general engine rather than the engine's subject. The API is named for what it
+does to geometry, not for what any one industry does with it. A game framework is explicitly later,
+and explicitly a separate decision.
 
 ---
 
@@ -40,8 +42,8 @@ at the top of each shader source.
 | Browser · Mono | (see below) | `#version 300 es` |
 
 **Why not Vulkan.** Three backends' worth of work (Vulkan + Metal via MoltenVK + WebGPU) to serve a
-performance ceiling this engine's use cases never approach. A print preview is a few million static
-triangles drawn once per interaction. Vulkan would also put an Apache-2.0 component (MoltenVK) in the
+performance ceiling this engine's use cases never approach. A static model viewer draws a few million
+triangles once per interaction. Vulkan would also put an Apache-2.0 component (MoltenVK) in the
 Apple path, which the licence policy would rather avoid.
 
 **Why not WebGPU.** It is the right long-term answer and is not ready across these six targets. The
@@ -131,7 +133,7 @@ than one to calibrate against.
 
 ### M2 · Viewer essentials — **done**
 
-`OrbitController` (orbit, pan, zoom, resize, reset), `Shapes` (ground grid, printer build plate,
+`OrbitController` (orbit, pan, zoom, resize, reset), `Shapes` (ground grid, bounded work area,
 RGB axis marker), `Material.Unlit`, and `RenderSettings.HighlightBackfaces`. All in `Core` except the
 two shader branches; nothing touches a window.
 
@@ -152,18 +154,26 @@ that path on every future backend and would drift from the one that draws everyt
 
 **`HighlightBackfaces` exists because the renderer's own kindness hides a defect.** The shader flips
 normals towards the viewer so an inverted facet shades like its neighbours rather than appearing as a
-black hole in a part the slicer would print fine — which is right, and which also means a user who
+black hole in geometry that is otherwise fine — which is right, and which also means someone who
 wants to FIX their mesh cannot see the problem. This is how they see it.
 
-### M3 · Printing — **done, except toolpaths**
+### M3 · Mesh diagnostics and sectioning — **done, except paths**
 
-`MeshAnalysis` (measurement and printability), `BoundingBox.SectionAt` with `RenderSettings.Section`,
+`MeshAnalysis` (measurement and topology), `BoundingBox.SectionAt` with `RenderSettings.Section`,
 and 3MF colour groups.
 
-**`MeshAnalysis` answers the question the whole project is for: would this print?** Volume, surface
-area, and the four ways a mesh fails a slicer — open edges, non-manifold edges, inconsistent winding,
-and being wound inside out. Plus `ExceedsBuildVolume`, which compares a part against a bed both ways
-round, because a part can be turned on the plate but cannot be made shorter.
+**`MeshAnalysis` reports what a surface IS.** Volume, surface area, and whether it is a closed,
+consistently oriented 2-manifold — the property that volume, inside/outside tests, boolean operations
+and offsetting all quietly assume. When it is not, which of the three irregularities applies:
+boundary edges, non-manifold edges, or inconsistent winding. Plus `ExceedsLimits`, a containment test
+that compares an object against a box both ways round, because most things resting on a surface can
+be turned on it but none of them can be made shorter.
+
+**Deliberately a diagnostic rather than a judgement.** It says what the geometry is and leaves what
+that means to the caller, because it depends entirely on what the mesh is for: an open surface is a
+defect in something meant to enclose a volume and completely correct in a terrain or a cloth. Naming
+any of this after one industry's workflow would have made a general engine answer a specific
+question.
 
 Two things in it are less obvious than they look:
 
@@ -172,30 +182,31 @@ Two things in it are less obvious than they look:
   into twenty-four — so matching edges by index reports every edge of a sound cube as a hole. A viewer
   doing that would tell its user their file is broken when it is not.
 - **Inside-out is detected from the SIGN of the volume**, because nothing else gives it away: a
-  consistently inverted mesh is perfectly watertight, and once the shader flips normals towards the
-  viewer it looks correct from outside. A slicer may then fill what should be hollow.
+  consistently inverted mesh is a perfectly good closed manifold, and once the shader flips normals
+  towards the viewer it looks correct from outside. Anything reasoning about which side is inside then
+  gets the opposite answer.
 
-Run against the real teapot it reports **128 open edges**, which is correct — the 3ds Max teapot
+Run against the real teapot it reports **128 boundary edges**, which is correct — the 3ds Max teapot
 primitive is an open surface, not a solid. Finding that on a real file is the point.
 
 **The section is a clip, not a cap, and the documentation says so.** Fragments in front of the plane
 are discarded and the exposed interior is painted flat, so the cut reads as a surface rather than a
-hole. A true cap needs a stencil pass and only means anything on a watertight mesh — which, as the
-teapot demonstrates, real files frequently are not. What is here shows walls, infill, and whether a
-boss is solid, which is usually the question.
+hole. A true cap needs a stencil pass and only means anything on a closed manifold — which, as the
+teapot demonstrates, real files frequently are not. What is here shows wall thickness and internal
+structure, which is usually the question.
 
 **3MF colour groups** now reach the mesh as vertex colours, with corners split only where the colours
 actually differ — a colour belongs to a corner rather than to a position, but splitting
 unconditionally would triple every mesh for a feature most files never use.
 
-#### Toolpaths are deliberately not here
+#### Machine paths are deliberately not here
 
 `PrimitiveKind.Lines` is still in the model for them, and the renderer draws lines today. What is
-missing is the parser, and it is deferred rather than forgotten because **G-code is a different kind
-of input**: not a model but a machine program, in a dialect that varies by slicer and firmware, whose
-useful display needs feature classification (perimeter, infill, support, travel) rather than
-geometry. That is its own decision with its own scope, and bundling it into "printing features"
-would have been the kind of quiet scope creep this plan named as a risk at the start.
+missing is a parser, and it is deferred rather than forgotten because **a machine program is a
+different kind of input**: not geometry but a sequence of instructions, in a dialect that varies by
+toolchain, whose useful display needs the moves classified by purpose rather than merely drawn. That
+is its own decision with its own scope, and folding it into a general engine's mesh work would have
+been the kind of quiet scope creep this plan named as a risk at the start.
 
 ### M4 · Textures and environment — **done**
 
@@ -301,7 +312,7 @@ ships optional packages, so the glue belongs there.
 CupriFace's own `samples/Demo3d` already does — a textured glTF model under a metallic-roughness
 shader, composited behind live UI on all three hosts. Wiring it earlier would replace a working demo
 with a worse one and call it progress. On the milestones below that is **M1 plus M4**; M2 and M3 are
-viewer and printing work that the CupriFace demo does not need.
+viewer and diagnostic work that the CupriFace demo does not need.
 
 ---
 
@@ -326,7 +337,7 @@ neither is a dependency of this repository: they are what a *caller* plugs into 
 | M0 asset layer | **done** |
 | M1 renderer | 1–2 weeks, of which the CI image-comparison gate is half |
 | M2 viewer essentials | ~1 week |
-| M3 printing features | 1–2 weeks |
+| M3 diagnostics and sectioning | 1–2 weeks |
 | M4 textures and environment | ~1 week |
 | M5 animation | months — reassess first |
 

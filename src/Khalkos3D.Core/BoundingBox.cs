@@ -4,8 +4,8 @@ namespace Khalkos3D;
 
 /// <summary>
 /// An axis-aligned box. Small, but it is what every viewer reaches for first: framing a camera on a
-/// model it has never seen, deciding a build-plate footprint, or telling a user how tall their part
-/// is before they print it.
+/// model it has never seen, checking whether something fits a region, or simply reporting how big it
+/// is.
 /// </summary>
 public readonly record struct BoundingBox(Vector3 Min, Vector3 Max)
 {
@@ -83,9 +83,9 @@ public readonly record struct BoundingBox(Vector3 Min, Vector3 Max)
     /// <summary>
     /// A cutting plane through this box, at a fraction of the way along a direction.
     ///
-    /// <para>For inspecting a print: slide it through a part and see the walls, the infill, and
-    /// whether that boss is actually solid. Expressed against the bounds rather than in absolute
-    /// coordinates, so a caller can offer a 0..1 slider without first knowing how big the model is.</para>
+    /// <para>For looking inside something: slide the plane through and see wall thickness and
+    /// internal structure. Expressed against the bounds rather than in absolute coordinates, so a
+    /// caller can offer a 0..1 slider without first knowing how big the model is.</para>
     /// </summary>
     /// <param name="normal">Which way to cut. Normalised on use.</param>
     /// <param name="fraction">0 puts the plane at the near extreme of the box along the normal, 1 at

@@ -25,7 +25,7 @@ All three have **zero dependencies** and use nothing outside the BCL, so they ru
   them. Merging them naively rounds off every corner; this merges only where the faces meet within an
   angle, so mechanical parts stay faceted and tessellated curves go smooth.
 - **Units.** A 3MF says whether it means millimetres or inches. This converts to millimetres so
-  measurements and build volumes are written once.
+  measurements are written once against one unit.
 - **It reports what it could not do.** `Scene.Report` lists features that were in the file and are
   not in the result — animations, material extensions, external buffers. Where a feature changes how
   the *bytes* are encoded (Draco, meshopt), loading throws instead, because a half-decoded mesh is

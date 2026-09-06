@@ -20,7 +20,7 @@ public enum PrimitiveKind
 /// <para><b>Channels, because the alternative is expensive in exactly the case that matters.</b> A
 /// fixed vertex struct carrying position, normal, UV and colour costs 48 bytes whether or not a file
 /// supplied any of them — and the format this engine exists to open first, STL, supplies only
-/// position and a per-facet normal. On a ten-million-triangle print that difference is well over a
+/// position and a per-facet normal. On a ten-million-triangle scan that difference is well over a
 /// gigabyte of zeroes. A null channel here costs one null reference.</para>
 ///
 /// <para>The layout also maps one-to-one onto GL attribute buffers, so the renderer uploads what is

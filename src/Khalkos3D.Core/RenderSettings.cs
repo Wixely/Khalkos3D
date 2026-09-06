@@ -29,8 +29,8 @@ public readonly record struct RenderSettings
     /// <summary>
     /// Which axis is up, so the environment gradient runs the right way.
     ///
-    /// <para>Set it from <see cref="Scene.Up"/>. A Z-up printed part lit by a Y-up gradient is lit
-    /// from the side, which looks like a lamp in the wrong place rather than like a wrong setting.</para>
+    /// <para>Set it from <see cref="Scene.Up"/>. A Z-up model lit by a Y-up gradient is lit from the
+    /// side, which looks like a lamp in the wrong place rather than like a wrong setting.</para>
     /// </summary>
     public UpAxis Up { get; init; } = UpAxis.Y;
 
@@ -45,16 +45,16 @@ public readonly record struct RenderSettings
     public bool Wireframe { get; init; }
 
     /// <summary>Shade by surface normal instead of by material — the debug view that makes an
-    /// inverted facet obvious, which on a printable mesh is the defect that matters most.</summary>
+    /// inverted facet obvious, which is the defect hardest to see any other way.</summary>
     public bool ShowNormals { get; init; }
 
     /// <summary>
     /// Paint back-facing triangles in a warning colour.
     ///
     /// <para><b>The counterpart to the shader flipping normals towards the viewer.</b> That flip is
-    /// what stops an inverted facet appearing as a black hole in a part the slicer would print
-    /// perfectly well — but it also HIDES the inversion, so a user who wants to fix their mesh has no
-    /// way to see it. This is that way: with it on, anything wound the wrong way lights up.</para>
+    /// what stops an inverted facet appearing as a black hole in geometry that is otherwise fine —
+    /// but it also HIDES the inversion, so someone who wants to fix their mesh has no way to see it.
+    /// This is that way: with it on, anything wound the wrong way lights up.</para>
     /// </summary>
     public bool HighlightBackfaces { get; init; }
 
@@ -72,8 +72,8 @@ public readonly record struct RenderSettings
     /// of the plane are discarded, so what shows through the cut is the INSIDE of the far wall,
     /// painted in <see cref="SectionColor"/> so it reads as a surface rather than as a hole. A true
     /// cap - a flat filled face exactly where the plane crosses the solid - needs a stencil pass and
-    /// only means anything on a watertight mesh, which the files this opens frequently are not. What
-    /// is here shows walls, infill and whether a boss is solid, which is usually the question.</para>
+    /// only means anything on a closed manifold, which loaded geometry frequently is not. What is here
+    /// shows wall thickness and internal structure, which is usually the question.</para>
     /// </summary>
     public Plane? Section { get; init; }
 

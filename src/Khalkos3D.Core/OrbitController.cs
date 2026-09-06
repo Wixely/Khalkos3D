@@ -21,7 +21,7 @@ public sealed class OrbitController
     /// <summary>The camera, after everything done to it so far.</summary>
     public Camera Camera { get; private set; } = Camera.Frame(BoundingBox.Empty);
 
-    /// <summary>Which axis the model treats as up. Set from <see cref="Scene.Up"/>, or a printed part
+    /// <summary>Which axis the model treats as up. Set from <see cref="Scene.Up"/>, or the model
     /// ends up on its side.</summary>
     public UpAxis Up { get; set; } = UpAxis.Y;
 

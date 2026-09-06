@@ -81,8 +81,8 @@ public class FormatTests
     public void An_inch_3mf_is_converted_to_millimetres()
     {
         // THE REASON 3MF IS WORTH READING AT ALL. An STL of a 20 mm cube and of a 20 inch cube are
-        // byte-identical apart from the numbers; a 3MF says which it means, so a build volume or a
-        // measurement can be written once against one unit.
+        // byte-identical apart from the numbers; a 3MF says which it means, so a measurement or a
+        // containment check can be written once against one unit.
         var scene = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(TestShapes.Box(Vector3.One), "inch")));
 
         Assert.Equal(25.4f, scene.Bounds.Size.X, 3);
@@ -131,8 +131,8 @@ public class FormatTests
     [Fact]
     public void A_3mf_colour_group_reaches_the_mesh_as_vertex_colours()
     {
-        // How a multi-colour print says which parts are which filament. Dropping it turns a two-tone
-        // model into a uniform grey one with nothing to indicate anything was lost.
+        // How a file says which parts of a mesh are which colour. Dropping it turns a two-tone model
+        // into a uniform grey one with nothing to indicate anything was lost.
         const string palette = """<colorgroup id="5"><color color="#FF0000"/><color color="#0000FF"/></colorgroup>""";
         var scene = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(
             TestShapes.Box(Vector3.One), extraResources: palette,

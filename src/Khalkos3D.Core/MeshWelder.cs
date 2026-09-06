@@ -2,8 +2,8 @@ using System.Numerics;
 
 namespace Khalkos3D;
 
-/// <summary>What welding achieved. Worth reporting rather than hiding: on a print file the ratio is
-/// large enough that a user watching a progress bar deserves to know why the number moved.</summary>
+/// <summary>What welding achieved. Worth reporting rather than hiding: on a large mesh the ratio is
+/// big enough that anyone watching a progress bar deserves to know why the number moved.</summary>
 /// <param name="VerticesBefore">Vertices in the input.</param>
 /// <param name="VerticesAfter">Vertices in the welded mesh.</param>
 /// <param name="HardEdgeSplits">EXTRA vertices created because faces meeting at a shared position
@@ -26,13 +26,13 @@ public readonly record struct WeldReport(int VerticesBefore, int VerticesAfter, 
 ///
 /// <para><b>This exists because of STL, and STL is the format this engine opens first.</b> An STL
 /// file has no concept of a shared vertex: it is a flat list of facets, each carrying its own three
-/// corners, so a cube arrives as 36 vertices rather than 8 and a million-triangle print arrives as
+/// corners, so a cube arrives as 36 vertices rather than 8 and a million-triangle model arrives as
 /// three million. Uploading that is three times the memory and three times the vertex shading for
 /// nothing.</para>
 ///
 /// <para><b>Welding naively then smoothing is the trap.</b> Merge every coincident position, average
 /// the normals, and a cube's corners round off — which is exactly wrong for the mechanical parts
-/// that dominate printing. So the merge is conditional: two corners at the same position are only
+/// that dominate engineering geometry. So the merge is conditional: two corners at the same position are only
 /// joined if their faces meet within <c>smoothingAngle</c>. A 90-degree cube corner exceeds any
 /// sane threshold and stays three separate vertices, so it renders flat; a finely tessellated
 /// cylinder falls well inside it and renders smooth. One pass, both behaviours, no per-model
@@ -87,7 +87,7 @@ public static class MeshWelder
         var indices = new int[mesh.Indices.Length];
 
         // Quantised position to the output vertices sitting there. A short list per cell: a
-        // watertight manifold shares each position between about six triangles, so these stay tiny
+        // closed manifold shares each position between about six triangles, so these stay tiny
         // and the linear scan inside one is cheaper than anything cleverer.
         var cells = new Dictionary<(float, float, float), List<int>>(mesh.VertexCount / 4);
         var splits = 0;

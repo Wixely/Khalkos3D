@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <Description>Model loaders for Khalkos3D: STL, OBJ, 3MF and glTF 2.0, all producing one Scene. Pure managed, no native dependencies, runs anywhere .NET does including WebAssembly.</Description>
-    <PackageTags>3d;stl;obj;3mf;gltf;glb;mesh;loader;3d-printing</PackageTags>
+    <PackageTags>3d;stl;obj;3mf;gltf;glb;mesh;loader;geometry</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -68,7 +68,7 @@ public class CameraTests
     [Fact]
     public void Framing_scales_with_the_model_rather_than_using_fixed_clip_planes()
     {
-        // A fixed near/far pair cannot serve a 5 mm printed clip and a 300 m terrain at once: too
+        // A fixed near/far pair cannot serve a 5 mm component and a 300 m terrain at once: too
         // near and depth precision collapses into z-fighting, too far and the front is clipped away.
         var small = Camera.Frame(Box(0.005f, 0.005f, 0.005f), UpAxis.Z);
         var large = Camera.Frame(Box(300f, 300f, 300f), UpAxis.Z);
@@ -99,8 +99,8 @@ public class CameraTests
     [Fact]
     public void The_up_axis_changes_which_way_the_model_stands()
     {
-        // Not cosmetic: an STL is Z-up by universal CAD convention, so a viewer that assumed Y-up
-        // lays every printed part on its side.
+        // Not cosmetic: an STL is Z-up by long CAD convention, so a viewer that assumed Y-up lays
+        // every such model on its side.
         var bounds = Box(10, 10, 10);
         var y = Camera.Frame(bounds, UpAxis.Y);
         var z = Camera.Frame(bounds, UpAxis.Z);

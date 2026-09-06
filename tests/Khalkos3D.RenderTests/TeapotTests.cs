@@ -209,13 +209,13 @@ public class TeapotTests(GlFixture gl, ITestOutputHelper output)
     [Fact]
     public void A_real_model_can_be_sectioned_and_measured()
     {
-        // The two printing questions on one real file: what is inside it, and would it print.
+        // Both diagnostics on one real file: what its topology is, and what is inside it.
         Assert.True(gl.GetProcAddress is not null, $"these tests need a GL context: {gl.Unavailable}");
         var scene = Load();
 
         var report = MeshAnalysis.Analyse(scene);
         output.WriteLine($"analysis: {report}");
-        if (report.Problem() is { } problem) output.WriteLine($"  would not print cleanly: {problem}");
+        if (report.Problem() is { } problem) output.WriteLine($"  not a closed manifold: {problem}");
         Assert.True(report.Triangles > 0);
         Assert.True(report.SurfaceArea > 0f);
 

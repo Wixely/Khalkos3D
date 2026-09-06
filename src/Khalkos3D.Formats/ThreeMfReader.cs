@@ -6,19 +6,18 @@ using System.Xml;
 namespace Khalkos3D.Formats;
 
 /// <summary>
-/// Reads 3MF — the format 3D printing moved to when it accepted that STL was not enough.
+/// Reads 3MF — the container format that carries what STL cannot.
 ///
 /// <para>A 3MF is a zip holding an XML model. That already buys everything STL lacks: <b>units</b>,
 /// so a part is a known size rather than a number of unnamed somethings; shared vertices, so no
-/// welding is needed; colours; a build plate holding several objects; and instancing, so twenty
-/// copies of a bracket are twenty transforms over one mesh rather than twenty copies of the
-/// geometry.</para>
+/// welding is needed; colours; a scene holding several objects; and instancing, so twenty copies of
+/// one object are twenty transforms over one mesh rather than twenty copies of the geometry.</para>
 ///
 /// <para><b>Units are the reason this reader is worth having even for a single part.</b> An STL of a
 /// 20 mm cube and an STL of a 20 inch cube are byte-identical apart from the numbers, and nothing in
 /// the file says which is meant. Every 3MF states its unit, and this reader converts to millimetres
-/// so that anything downstream — a build volume, a measurement, a scale bar — can be written once
-/// against one unit instead of guessing per file.</para>
+/// so that anything downstream — a containment check, a measurement, a scale bar — can be written
+/// once against one unit instead of guessing per file.</para>
 /// </summary>
 public static class ThreeMfReader
 {
@@ -156,7 +155,7 @@ public static class ThreeMfReader
             Materials = materials.Count > 0 ? materials : [options.Material ?? Material.Default],
             Roots = roots,
             Report = report.Build(),
-            // Z-up, and unlike STL the specification says so: 3MF puts the build plate in XY.
+            // Z-up, and unlike STL the specification says so: 3MF puts the ground plane in XY.
             Up = UpAxis.Z,
         };
 
@@ -367,8 +366,8 @@ public static class ThreeMfReader
     /// <summary>
     /// A palette of colours triangles can index into — the 3MF materials extension.
     ///
-    /// <para>This is how a multi-colour print says which parts are which filament, so dropping it
-    /// turns a two-tone model into a uniform grey one with no indication that anything was lost.</para>
+    /// <para>This is how a file says which parts of a mesh are which colour, so dropping it turns a
+    /// two-tone model into a uniform grey one with no indication that anything was lost.</para>
     /// </summary>
     private static void ReadColorGroup(XmlReader reader, Dictionary<int, List<Vector4>> into)
     {

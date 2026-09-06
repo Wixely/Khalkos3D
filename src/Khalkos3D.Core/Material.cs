@@ -32,8 +32,8 @@ public enum AlphaMode
 public sealed class Material
 {
     /// <summary>The default: a plain, slightly rough white dielectric. What a mesh with no material
-    /// gets, and deliberately neutral — an unlit magenta would be more visible but a print viewer
-    /// showing an untextured part should show the part, not a diagnostic.</summary>
+    /// gets, and deliberately neutral — an unlit magenta would be more visible, but a viewer showing
+    /// untextured geometry should show the geometry, not a diagnostic.</summary>
     public static Material Default { get; } = new() { Name = "default" };
 
     /// <summary>Name from the file, for pick lists and diagnostics.</summary>
@@ -47,7 +47,7 @@ public sealed class Material
     /// physically meaningless and exist only for texture blending across a boundary.</summary>
     public float Metallic { get; init; }
 
-    /// <summary>0 is a mirror, 1 is fully diffuse. The default sits where most printed plastic
+    /// <summary>0 is a mirror, 1 is fully diffuse. The default sits where most matte plastic
     /// actually lands.</summary>
     public float Roughness { get; init; } = 0.6f;
 
@@ -71,19 +71,19 @@ public sealed class Material
     /// <summary>
     /// Render back faces as well as front.
     ///
-    /// <para>Defaults to TRUE, which is the opposite of glTF's default and deliberate. A printable
-    /// mesh is meant to be a closed solid, so culling would be free — but real STL files routinely
-    /// contain inverted facets, and a hole in a part that the slicer will print fine is a bug report
-    /// about this viewer. Correct-looking beats theoretically-faster for the format this engine
-    /// opens first; a glTF loader sets it from the file and gets the culling back.</para>
+    /// <para>Defaults to TRUE, which is the opposite of glTF's default and deliberate. Geometry meant
+    /// to be a closed solid could be culled for free — but real STL files routinely contain inverted
+    /// facets, and a hole in a model that is otherwise fine is a bug report about this renderer.
+    /// Correct-looking beats theoretically-faster for a format that carries no such declaration; a
+    /// glTF loader sets it from the file and gets the culling back.</para>
     /// </summary>
     public bool DoubleSided { get; init; } = true;
 
     /// <summary>
     /// Skip lighting entirely and show the base colour as it is.
     ///
-    /// <para>For scenery rather than surfaces: a grid, a build plate, an axis marker, later a
-    /// toolpath. Shading a grid line makes it dim on one side of the model and bright on the other,
+    /// <para>For scenery rather than surfaces: a grid, a work area, an axis marker, later a path or
+    /// a trace. Shading a grid line makes it dim on one side of the model and bright on the other,
     /// which reads as a rendering fault because a line has no meaningful normal to be lit by.</para>
     /// </summary>
     public bool Unlit { get; init; }
