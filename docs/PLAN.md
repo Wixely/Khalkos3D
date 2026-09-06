@@ -191,6 +191,20 @@ glTF model under a metallic-roughness shader. The one thing a consumer must stil
 `GltfOptions.DecodeImage` — see [LICENSING.md](LICENSING.md) for why no codec is bundled. A CupriFace
 app has SkiaSharp, so that is four lines.
 
+### Proven on a real file
+
+`tests/assets/teapot.glb` is CupriFace's own demo model, and opening it found something no synthetic
+fixture could. It parses to the 4,032 triangles CupriFace documents, decodes to the 701×561 texture
+CupriFace names, and renders recognisably as the same object — through interleaved accessors at
+stride 32, 32-bit indices and a two-node graph.
+
+**And it rendered speckled.** The file declares `minFilter: LINEAR`, as exporters constantly do
+without meaning anything by it, and honouring that faithfully aliases a 701×561 texture on a
+200-pixel object into a visible shimmer that reads as a broken renderer. So `UpgradeMinFilters`
+defaults to on, and records the deviation in the load report — a considered choice rather than quietly
+ignoring the file. That is a bug found by opening one real file that a hundred hand-written fixtures
+would not have found, which is the argument for the file being there.
+
 ### M5 · Animation — **reassess before starting**
 
 Node animation and skinning. This is the point where the commitment changes shape: months rather than

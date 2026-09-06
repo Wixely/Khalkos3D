@@ -24,6 +24,20 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />
+    <!-- The image decoder for the real-asset test. StannumFab bundles no codec on purpose - see
+         docs/LICENSING.md - so a caller supplies one through GltfOptions.DecodeImage, and this is
+         a test standing in for that caller. SkiaSharp is MIT, and is a TEST dependency: nothing in
+         src/ references it, which the dependencies CI job asserts. -->
+    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <!-- The base SkiaSharp package carries no Linux native, so the CI render job would load
+         the file and then fail to decode its JPEG. NoDependencies avoids needing fontconfig,
+         which a headless runner does not have. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copied rather than embedded so a failure can be reproduced by opening the file by hand. -->
+    <None Include="../assets/teapot.glb" Link="teapot.glb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

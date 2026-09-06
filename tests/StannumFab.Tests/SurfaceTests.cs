@@ -35,8 +35,24 @@ public class SurfaceTests
         Assert.Equal(TextureWrap.MirroredRepeat, texture.WrapT);
         Assert.Equal(TextureFilter.Nearest, texture.Magnify);
         Assert.Equal(TextureFilter.Linear, texture.Minify);
-        // minFilter 9729 is plain LINEAR, which is one of the two non-mipmapped filters.
-        Assert.False(texture.Mipmaps);
+
+        // minFilter 9729 is plain LINEAR — one of the two non-mipmapped filters — and by default it
+        // is UPGRADED to a mipmapped one, with the deviation recorded. See UpgradeMinFilters: it was
+        // found by rendering a real file whose exporter wrote 9729 without meaning anything by it,
+        // and honouring that faithfully aliased a large texture into a visible shimmer.
+        Assert.True(texture.Mipmaps);
+        Assert.Contains(scene.Report.Notes, n => n.Feature == "min filter");
+    }
+
+    [Fact]
+    public void The_min_filter_upgrade_can_be_turned_off_to_see_what_the_file_asked_for()
+    {
+        var scene = GltfReader.Read(TestFiles.Glb(Triangle, TriangleIndices,
+            topLevel: OneTexture, materials: ", \"material\": 0"),
+            new GltfOptions { UpgradeMinFilters = false });
+
+        Assert.False(Assert.Single(scene.Textures).Mipmaps);
+        Assert.DoesNotContain(scene.Report.Notes, n => n.Feature == "min filter");
     }
 
     [Fact]

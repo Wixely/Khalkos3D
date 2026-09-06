@@ -282,6 +282,7 @@ public static class GltfReader
         private void LoadTextures()
         {
             if (!root.TryGetProperty("textures", out var textures)) return;
+            var upgraded = 0;
             var samplers = root.TryGetProperty("samplers", out var declared)
                 ? declared.EnumerateArray().ToArray() : [];
 
@@ -295,10 +296,28 @@ public static class GltfReader
                 if (texture.TryGetProperty("sampler", out var samplerRef))
                 {
                     var index = samplerRef.GetInt32();
-                    if ((uint)index < (uint)samplers.Length) reference = WithSampler(reference, samplers[index]);
+                    if ((uint)index < (uint)samplers.Length)
+                    {
+                        reference = WithSampler(reference, samplers[index]);
+
+                        // See UpgradeMinFilters. Doing MORE than the file asked, so this is an Info
+                        // rather than an Unsupported — but it is still recorded, because a silent
+                        // deviation from the file is exactly what this library is meant not to do.
+                        if (!reference.Mipmaps && options.UpgradeMinFilters)
+                        {
+                            reference = reference with { Mipmaps = true };
+                            upgraded++;
+                        }
+                    }
                 }
                 _textures.Add(reference);
             }
+
+            if (upgraded > 0)
+                report.Info("min filter",
+                    $"{upgraded} texture(s) asked for unmipmapped minification; a mip chain was used " +
+                    "instead, because without one a large texture on a small object aliases into a " +
+                    "shimmer that reads as a rendering fault");
         }
 
         /// <summary>glTF stores sampler settings as raw GL enum values.</summary>
@@ -789,6 +808,20 @@ public sealed record GltfOptions
     /// <para>With SkiaSharp, this is four lines; the repository README has them.</para>
     /// </summary>
     public Func<byte[], ImageData?>? DecodeImage { get; init; }
+
+    /// <summary>
+    /// Use a mip chain even where a file asks for unmipmapped minification.
+    ///
+    /// <para><b>On by default, which is a deliberate deviation from the file.</b> Exporters write
+    /// <c>minFilter: LINEAR</c> constantly without meaning anything by it — the teapot this project
+    /// tests against does — and honouring it faithfully makes a large texture on a small object
+    /// alias into a shimmer that moves as the model turns. Users read that as a broken renderer, not
+    /// as a faithfully honoured sampler.</para>
+    ///
+    /// <para>It is recorded in <see cref="Scene.Report"/> either way, so the deviation is visible
+    /// rather than silent. Turn it off to see exactly what the file specified.</para>
+    /// </summary>
+    public bool UpgradeMinFilters { get; init; } = true;
 
     /// <summary>Resolves a relative URI for an external buffer or image. Supplied automatically by
     /// <see cref="GltfReader.ReadFile"/>, restricted to the model's own directory. Null means
