@@ -130,8 +130,18 @@ jobs:
 
           dotnet publish -c Release
 
-          # The link really produced wasm for our assemblies, rather than merely compiling them.
-          bundle=bin/Release/net10.0-browser/browser-wasm/AppBundle/_framework
-          test -f "$bundle/StannumFab.Core.wasm"
-          test -f "$bundle/StannumFab.Formats.wasm"
+          # The link really carried our assemblies into the bundle, rather than merely compiling
+          # them. Matched by NAME rather than by exact filename: the extension depends on whether
+          # Webcil is on, which varies by SDK and configuration, and pinning it made this gate fail
+          # on a publish that had in fact succeeded. The listing is printed either way, so a future
+          # failure here is diagnosable from the log instead of needing a local reproduction.
+          bundle=bin/Release/net10.0-browser/browser-wasm/AppBundle
+          echo "--- bundle contents ---"
+          find "$bundle" -name 'StannumFab.*' -printf '%P\n' | sort
+          found=$(find "$bundle" -name 'StannumFab.Core.*' -o -name 'StannumFab.Formats.*' | wc -l)
+          if [ "$found" -lt 2 ]; then
+            echo "::error::the wasm bundle does not contain both StannumFab assemblies"
+            find "$bundle" -type f -printf '%P\n' | sort | head -50
+            exit 1
+          fi
           echo "ok: the asset layer links for browser-wasm"
