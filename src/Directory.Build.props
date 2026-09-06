@@ -16,11 +16,11 @@
 
     <Version Condition="'$(Version)' == ''">0.1.0-dev</Version>
     <Authors>Wixely</Authors>
-    <Product>StannumFab</Product>
+    <Product>Khalkos3D</Product>
     <Copyright>Copyright (c) 2026 Wixely</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/Wixely/StannumFab</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Wixely/StannumFab</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Wixely/Khalkos3D</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Wixely/Khalkos3D</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
 

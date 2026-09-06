@@ -1,4 +1,4 @@
-# StannumFab
+# Khalkos3D
 
 A small, managed-first 3D engine for .NET. Load models, render them anywhere.
 
@@ -29,9 +29,9 @@ entire world to get it.
 
 | | |
 |---|---|
-| **`StannumFab.Core`** | `Mesh`, `Material`, `Scene`, `BoundingBox`, `Camera`, and the vertex welder |
-| **`StannumFab.Formats`** | STL, OBJ, 3MF and glTF 2.0 / GLB, all producing the same `Scene` |
-| **`StannumFab.Gl`** | draws it — desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source |
+| **`Khalkos3D.Core`** | `Mesh`, `Material`, `Scene`, `BoundingBox`, `Camera`, and the vertex welder |
+| **`Khalkos3D.Formats`** | STL, OBJ, 3MF and glTF 2.0 / GLB, all producing the same `Scene` |
+| **`Khalkos3D.Gl`** | draws it — desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source |
 
 **All three have zero dependencies.** Nothing outside the BCL, so the asset layer compiles for every
 target including WebAssembly — where a native parser would mean a per-platform build matrix for what
@@ -125,9 +125,9 @@ hosts. Replacing a working demo with a worse one is not progress. See
 ## Building
 
 ```
-dotnet build StannumFab.slnx
-dotnet test tests/StannumFab.Tests          # no GPU needed; runs anywhere
-dotnet test tests/StannumFab.RenderTests    # needs a GL context (xvfb-run on a headless Linux box)
+dotnet build Khalkos3D.slnx
+dotnet test tests/Khalkos3D.Tests          # no GPU needed; runs anywhere
+dotnet test tests/Khalkos3D.RenderTests    # needs a GL context (xvfb-run on a headless Linux box)
 ```
 
 Requires the .NET 10 SDK. Warnings are errors.

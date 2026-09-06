@@ -1,4 +1,4 @@
-# StannumFab
+# Khalkos3D
 
 A small, managed-first 3D engine for .NET. Load models, render them anywhere.
 
@@ -7,13 +7,17 @@ var scene = ModelReader.ReadFile("bracket.stl");
 Console.WriteLine($"{scene.TriangleCount:N0} triangles, {scene.Bounds}");
 ```
 
-**`StannumFab.Core`** — `Mesh`, `Material`, `Scene`, `BoundingBox` and an angle-aware vertex welder.
+**`Khalkos3D.Core`** — `Mesh`, `Material`, `Scene`, `BoundingBox`, `Camera` and an angle-aware
+vertex welder.
 
-**`StannumFab.Formats`** — STL (binary and ASCII), OBJ, 3MF and glTF 2.0 / GLB, all producing the
+**`Khalkos3D.Formats`** — STL (binary and ASCII), OBJ, 3MF and glTF 2.0 / GLB, all producing the
 same `Scene`.
 
-Both have **zero dependencies** and use nothing outside the BCL, so they run anywhere .NET does —
-including WebAssembly, Android and iOS, with no native artefacts.
+**`Khalkos3D.Gl`** — draws it, on desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source.
+It creates no window and no context, so it embeds wherever there is already one.
+
+All three have **zero dependencies** and use nothing outside the BCL, so they run anywhere .NET does
+— including WebAssembly, Android and iOS, with no native artefacts.
 
 ## What it does that most loaders do not
 
@@ -27,8 +31,9 @@ including WebAssembly, Android and iOS, with no native artefacts.
   the *bytes* are encoded (Draco, meshopt), loading throws instead, because a half-decoded mesh is
   wrong rather than merely plain.
 
-MIT licensed, and held to a [dependency policy](https://github.com/Wixely/StannumFab/blob/main/docs/LICENSING.md)
+MIT licensed, and held to a [dependency policy](https://github.com/Wixely/Khalkos3D/blob/main/docs/LICENSING.md)
 that keeps it that way.
 
-**Status:** the asset layer is complete and tested; the renderer is next. See
-[the plan](https://github.com/Wixely/StannumFab/blob/main/docs/PLAN.md).
+**Status:** loaders, renderer and viewer controls all work and are tested against real GL drivers,
+including on CupriFace's own teapot model. See
+[the plan](https://github.com/Wixely/Khalkos3D/blob/main/docs/PLAN.md).

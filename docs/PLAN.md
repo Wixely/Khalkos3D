@@ -1,4 +1,4 @@
-# StannumFab: what it is, and how it gets built
+# Khalkos3D: what it is, and how it gets built
 
 Written at the start, so the decisions that are expensive to reverse are visible before they are
 made. Revised as they are tested — the sizing at the bottom is an estimate and estimates on this kind
@@ -62,7 +62,7 @@ changes.
 
 ## Decision 2: the engine does not own a window
 
-`StannumFab.Gl` is handed a proc-address function and a size, and draws. It never creates a context,
+`Khalkos3D.Gl` is handed a proc-address function and a size, and draws. It never creates a context,
 a window or a swap chain.
 
 That is what lets one renderer serve a desktop window, an Android `SurfaceView`, a browser canvas and
@@ -70,7 +70,7 @@ an offscreen framebuffer inside somebody else's UI toolkit — which is the actu
 since embedding in CupriFace was a founding use case. An engine that owned its window would need a
 separate integration for each, which is precisely the duplication this exists to avoid.
 
-Standalone applications need a window from somewhere, so an optional `StannumFab.Windowing` will wrap
+Standalone applications need a window from somewhere, so an optional `Khalkos3D.Windowing` will wrap
 Silk.NET (MIT) for samples and simple apps. Optional, so nothing that embeds ever pays for it.
 
 ## Decision 3: managed everywhere it is not absurd
@@ -99,7 +99,7 @@ of it, which is why it went first.
 
 ### M1 · The renderer — **mostly done**
 
-`StannumFab.Gl` draws a `Scene`, verified against a real driver (NVIDIA GL 3.3 core locally, Mesa
+`Khalkos3D.Gl` draws a `Scene`, verified against a real driver (NVIDIA GL 3.3 core locally, Mesa
 llvmpipe on CI).
 
 Done: instanced entry-point table from a supplied `Func<string, nint>` · Cook-Torrance
@@ -227,7 +227,7 @@ with a tiling UV, gets clamping, and half the model samples one edge texel — w
 the texture parameters reading back exactly as they were set. It was invisible on one desktop driver
 and glaring on a phone.
 
-So: `StannumFab.Gl` will reset a documented list of state before every frame, enforced in one place
+So: `Khalkos3D.Gl` will reset a documented list of state before every frame, enforced in one place
 rather than written down. The list is sampler objects first, then the enables (blend, scissor,
 stencil, cull, dither), depth state, colour mask, active texture unit, pixel store alignment and the
 bound program.
@@ -262,7 +262,7 @@ engine taking a dependency on a UI toolkit inverts the direction, and practicall
 repo's CI to CupriFace's package feed. CupriFace already has the packaging machinery and already
 ships optional packages, so the glue belongs there.
 
-**And it waits.** Not until M1 merely renders something, but until StannumFab is on par with what
+**And it waits.** Not until M1 merely renders something, but until Khalkos3D is on par with what
 CupriFace's own `samples/Demo3d` already does — a textured glTF model under a metallic-roughness
 shader, composited behind live UI on all three hosts. Wiring it earlier would replace a working demo
 with a worse one and call it progress. On the milestones below that is **M1 plus M4**; M2 and M3 are

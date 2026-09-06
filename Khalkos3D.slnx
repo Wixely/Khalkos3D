@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Khalkos3D.Core/Khalkos3D.Core.csproj" />
+    <Project Path="src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
+    <Project Path="src/Khalkos3D.Gl/Khalkos3D.Gl.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Khalkos3D.Tests/Khalkos3D.Tests.csproj" />
+    <Project Path="tests/Khalkos3D.RenderTests/Khalkos3D.RenderTests.csproj" />
+  </Folder>
+</Solution>

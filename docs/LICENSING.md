@@ -1,10 +1,10 @@
 # Licence policy
 
-**StannumFab is MIT, and nothing goes in that puts that at risk.**
+**Khalkos3D is MIT, and nothing goes in that puts that at risk.**
 
 The rule, stated once so it does not have to be re-argued per pull request:
 
-> A dependency is acceptable only if a downstream user can ship StannumFab under MIT, in a closed
+> A dependency is acceptable only if a downstream user can ship Khalkos3D under MIT, in a closed
 > commercial product, without acquiring a licence, publishing source, or accepting terms beyond
 > attribution.
 
@@ -27,7 +27,7 @@ project's deployment story. It is refused rather than managed.
 
 ## Dependencies today
 
-**Zero.** `StannumFab.Core` and `StannumFab.Formats` use nothing outside the BCL. That is not an
+**Zero.** `Khalkos3D.Core` and `Khalkos3D.Formats` use nothing outside the BCL. That is not an
 aspiration that will quietly erode; it is the reason the asset layer compiles for WebAssembly, iOS
 and Android with no per-platform matrix, and it should be defended.
 
