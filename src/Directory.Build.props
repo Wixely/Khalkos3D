@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    Shared settings and NuGet metadata for the shipped libraries. Scoped to src/ deliberately:
+    tests and samples must never produce packages, and keeping this out of the repo root means
+    they cannot.
+
+    Version defaults to a dev value and is overridden by CI from the git tag.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <Version Condition="'$(Version)' == ''">0.1.0-dev</Version>
+    <Authors>Wixely</Authors>
+    <Product>StannumFab</Product>
+    <Copyright>Copyright (c) 2026 Wixely</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Wixely/StannumFab</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Wixely/StannumFab</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\PACKAGE.md" Pack="true" PackagePath="" Visible="false" />
+  </ItemGroup>
+
+</Project>

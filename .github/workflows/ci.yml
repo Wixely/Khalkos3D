@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Three operating systems because the asset layer is meant to be identical on all of them, and
+      # the failures that would break that promise are exactly the ones a single runner hides: path
+      # separators, line endings, and the current culture. A comma-decimal machine parsing "1.5" as
+      # 15 produces a model ten times too big with nothing to indicate why.
+      - name: Build
+        run: dotnet build StannumFab.slnx -c Release
+
+      - name: Test
+        run: dotnet test tests/StannumFab.Tests -c Release --no-build --logger "console;verbosity=normal"
+
+  dependencies:
+    name: The shipped libraries depend on nothing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # THE LICENCE POLICY, ENFORCED RATHER THAN INTENDED. docs/LICENSING.md says Core and Formats
+      # use nothing outside the BCL, and that claim is what makes them compile for WebAssembly, iOS
+      # and Android with no per-platform matrix and nothing to sign. A policy that depends on
+      # remembering is not a policy, so the zero is asserted here — including transitively, which is
+      # where an unwanted licence would actually arrive.
+      - name: No package references, direct or transitive
+        run: |
+          set -euo pipefail
+          fail=0
+          for project in src/StannumFab.Core src/StannumFab.Formats; do
+            dotnet restore "$project" > /dev/null
+            listing=$(dotnet list "$project" package --include-transitive 2>&1)
+            if echo "$listing" | grep -qE '^\s+> '; then
+              echo "::error::$project has package references; docs/LICENSING.md says it must have none"
+              echo "$listing"
+              fail=1
+            else
+              echo "ok: $project depends on nothing"
+            fi
+          done
+          exit $fail
+
+  wasm:
+    name: The asset layer compiles for WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install wasm tooling
+        run: dotnet workload install wasm-tools
+
+      # The README claims these run in a browser. A claim about a target nobody builds for is a claim
+      # that stops being true quietly — one BCL call that has no wasm implementation is all it takes,
+      # and it would be found by a user rather than by us.
+      - name: Publish a wasm app that references the loaders
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wasmcheck && cd /tmp/wasmcheck
+          dotnet new wasmconsole -o probe
+          cd probe
+          dotnet add reference "$GITHUB_WORKSPACE/src/StannumFab.Formats/StannumFab.Formats.csproj"
+          cat > Program.cs <<'PROGRAM'
+          using StannumFab;
+          using StannumFab.Formats;
+          // Touch every reader so the trimmer cannot decide none of this is reachable.
+          Console.WriteLine(ModelReader.Detect("solid x facet"u8, "stl"));
+          Console.WriteLine(BoundingBox.Empty.IsEmpty);
+          Console.WriteLine(typeof(StlReader).Name + typeof(ObjReader).Name +
+                            typeof(ThreeMfReader).Name + typeof(GltfReader).Name);
+          PROGRAM
+          dotnet publish -c Release

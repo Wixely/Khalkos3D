@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StannumFab.Core/StannumFab.Core.csproj" />
+    <Project Path="src/StannumFab.Formats/StannumFab.Formats.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StannumFab.Tests/StannumFab.Tests.csproj" />
+  </Folder>
+</Solution>

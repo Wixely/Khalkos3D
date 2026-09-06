@@ -1,0 +1,13 @@
+# LF everywhere, including in the working tree on Windows.
+#
+# Not a style preference: .github/workflows/ci.yml carries a bash heredoc, and a CRLF line ending
+# inside one makes the terminator fail to match, which fails the job with a shell parse error rather
+# than anything resembling the actual cause.
+* text=auto eol=lf
+
+# Binary, so git never guesses at them.
+*.png binary
+*.jpg binary
+*.glb binary
+*.stl binary
+*.3mf binary
