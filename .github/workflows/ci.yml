@@ -74,23 +74,64 @@ jobs:
       - name: Install wasm tooling
         run: dotnet workload install wasm-tools
 
-      # The README claims these run in a browser. A claim about a target nobody builds for is a claim
-      # that stops being true quietly — one BCL call that has no wasm implementation is all it takes,
-      # and it would be found by a user rather than by us.
-      - name: Publish a wasm app that references the loaders
+      # The README claims these run in a browser. A claim about a target nobody builds for is one that
+      # stops being true quietly — a single BCL call with no wasm implementation is all it takes, and
+      # it would be found by a user rather than by us.
+      #
+      # The probe project is written out here rather than made with `dotnet new`, because the
+      # wasmconsole template lives in the EXPERIMENTAL workload rather than wasm-tools. Targeting
+      # net10.0-browser is the half that matters: it turns on the platform-compatibility analyser, so
+      # an API that browser does not support becomes CA1416 — an error, since warnings are errors —
+      # instead of a runtime failure in someone's tab.
+      - name: The loaders compile and link for browser-wasm
         run: |
           set -euo pipefail
-          mkdir -p /tmp/wasmcheck && cd /tmp/wasmcheck
-          dotnet new wasmconsole -o probe
-          cd probe
-          dotnet add reference "$GITHUB_WORKSPACE/src/StannumFab.Formats/StannumFab.Formats.csproj"
-          cat > Program.cs <<'PROGRAM'
+          rm -rf /tmp/wasmprobe && mkdir -p /tmp/wasmprobe && cd /tmp/wasmprobe
+
+          cat > probe.csproj <<'CSPROJ'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0-browser</TargetFramework>
+              <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+              <OutputType>Exe</OutputType>
+              <Nullable>enable</Nullable>
+              <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+            </PropertyGroup>
+            <ItemGroup>
+              <ProjectReference Include="REPO/src/StannumFab.Formats/StannumFab.Formats.csproj" />
+            </ItemGroup>
+          </Project>
+          CSPROJ
+          sed -i "s|REPO|$GITHUB_WORKSPACE|" probe.csproj
+
+          cat > Probe.cs <<'PROBE'
+          using System.IO;
           using StannumFab;
           using StannumFab.Formats;
-          // Touch every reader so the trimmer cannot decide none of this is reachable.
-          Console.WriteLine(ModelReader.Detect("solid x facet"u8, "stl"));
-          Console.WriteLine(BoundingBox.Empty.IsEmpty);
-          Console.WriteLine(typeof(StlReader).Name + typeof(ObjReader).Name +
-                            typeof(ThreeMfReader).Name + typeof(GltfReader).Name);
-          PROGRAM
+
+          public static class Probe
+          {
+              // Every reader is touched, so the analyser sees each one from a browser-targeted
+              // compilation and the trimmer cannot decide none of it is reachable.
+              public static string Run(byte[] bytes)
+              {
+                  var scene = ModelReader.Read(bytes, "stl");
+                  _ = StlReader.Read(new MemoryStream(bytes));
+                  _ = ObjReader.Read(new MemoryStream(bytes));
+                  _ = ThreeMfReader.Read(new MemoryStream(bytes));
+                  _ = GltfReader.Read(bytes);
+                  _ = MeshWelder.Weld(scene.Meshes[0], out _);
+                  return $"{scene.TriangleCount} {scene.Bounds} {BoundingBox.Empty.IsEmpty}";
+              }
+
+              public static void Main() { }
+          }
+          PROBE
+
           dotnet publish -c Release
+
+          # The link really produced wasm for our assemblies, rather than merely compiling them.
+          bundle=bin/Release/net10.0-browser/browser-wasm/AppBundle/_framework
+          test -f "$bundle/StannumFab.Core.wasm"
+          test -f "$bundle/StannumFab.Formats.wasm"
+          echo "ok: the asset layer links for browser-wasm"

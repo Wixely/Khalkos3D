@@ -184,11 +184,16 @@ sealed class StannumContent(Scene scene) : IGlContent
 }
 ```
 
-**Where that code lives matters, and the answer is "not in this repository".** A general-purpose
-engine taking a dependency on a UI toolkit inverts the direction — and practically, it would tie this
-repo's CI to CupriFace's package feed. It belongs either in the consuming app (thirty lines, and the
-app already references both) or as an optional package on CupriFace's side, which is where the
-packaging machinery already is. Documented in both READMEs; not shipped from here.
+**Where that code lives is decided: the CupriFace repository, not this one.** A general-purpose
+engine taking a dependency on a UI toolkit inverts the direction, and practically it would tie this
+repo's CI to CupriFace's package feed. CupriFace already has the packaging machinery and already
+ships optional packages, so the glue belongs there.
+
+**And it waits.** Not until M1 merely renders something, but until StannumFab is on par with what
+CupriFace's own `samples/Demo3d` already does — a textured glTF model under a metallic-roughness
+shader, composited behind live UI on all three hosts. Wiring it earlier would replace a working demo
+with a worse one and call it progress. On the milestones below that is **M1 plus M4**; M2 and M3 are
+viewer and printing work that the CupriFace demo does not need.
 
 ---
 
