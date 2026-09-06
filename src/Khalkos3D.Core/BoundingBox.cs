@@ -80,6 +80,40 @@ public readonly record struct BoundingBox(Vector3 Min, Vector3 Max)
         return result;
     }
 
+    /// <summary>
+    /// A cutting plane through this box, at a fraction of the way along a direction.
+    ///
+    /// <para>For inspecting a print: slide it through a part and see the walls, the infill, and
+    /// whether that boss is actually solid. Expressed against the bounds rather than in absolute
+    /// coordinates, so a caller can offer a 0..1 slider without first knowing how big the model is.</para>
+    /// </summary>
+    /// <param name="normal">Which way to cut. Normalised on use.</param>
+    /// <param name="fraction">0 puts the plane at the near extreme of the box along the normal, 1 at
+    /// the far extreme. Outside that range nothing is cut off.</param>
+    public Plane SectionAt(Vector3 normal, float fraction)
+    {
+        var length = normal.Length();
+        var unit = length > 1e-6f ? normal / length : Vector3.UnitZ;
+        if (IsEmpty) return new Plane(unit, 0f);
+
+        // The extent along the cut direction, taken from the CORNERS rather than from Size: a
+        // diagonal cut spans further than any single axis, and using Size would clip the model short.
+        float min = float.PositiveInfinity, max = float.NegativeInfinity;
+        for (var i = 0; i < 8; i++)
+        {
+            var corner = new Vector3(
+                (i & 1) == 0 ? Min.X : Max.X,
+                (i & 2) == 0 ? Min.Y : Max.Y,
+                (i & 4) == 0 ? Min.Z : Max.Z);
+            var d = Vector3.Dot(corner, unit);
+            min = MathF.Min(min, d);
+            max = MathF.Max(max, d);
+        }
+
+        // Plane convention is dot(normal, p) + D = 0, so D is the negated offset.
+        return new Plane(unit, -(min + (max - min) * fraction));
+    }
+
     /// <inheritdoc/>
     public override string ToString() =>
         IsEmpty ? "empty" : $"{Size.X:0.###} x {Size.Y:0.###} x {Size.Z:0.###} at {Center}";

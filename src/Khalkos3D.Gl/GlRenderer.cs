@@ -148,6 +148,11 @@ public sealed unsafe class GlRenderer : IDisposable
         gl.Uniform1i(_u.ShowNormals, settings.ShowNormals ? 1 : 0);
         gl.Uniform1i(_u.HighlightBackfaces, settings.HighlightBackfaces ? 1 : 0);
         SetVector3(_u.BackfaceColor, settings.BackfaceColor);
+
+        gl.Uniform1i(_u.SectionActive, settings.Section is not null ? 1 : 0);
+        if (settings.Section is { } plane && _u.SectionPlane >= 0)
+            gl.Uniform4f(_u.SectionPlane, plane.Normal.X, plane.Normal.Y, plane.Normal.Z, plane.D);
+        SetVector3(_u.SectionColor, settings.SectionColor);
         // Fixed units: base colour on 0, normal map on 1. Set once per frame rather than per draw,
         // since the sampler-to-unit mapping never changes.
         gl.Uniform1i(_u.Tex, 0);
@@ -238,7 +243,11 @@ public sealed unsafe class GlRenderer : IDisposable
         // material, a wireframe, or the debug view whose entire purpose is to show them. Leaving
         // culling on with HighlightBackfaces would produce a view that reported no problems because
         // it had thrown away the evidence.
-        if (material.DoubleSided || settings.Wireframe || settings.HighlightBackfaces)
+        // Culling off whenever a back face is something to SEE: a double-sided material, a
+        // wireframe, the backface debug view, or a section - where the interior of the far wall IS
+        // the picture, and culling it would leave the cut looking like a hole through the model.
+        if (material.DoubleSided || settings.Wireframe || settings.HighlightBackfaces ||
+            settings.Section is not null)
             gl.Disable(GlApi.CULL_FACE);
         else { gl.Enable(GlApi.CULL_FACE); gl.CullFace(GlApi.BACK); }
 
@@ -531,6 +540,7 @@ public sealed unsafe class GlRenderer : IDisposable
         internal readonly int NormalTex, HasNormalMap;
         internal readonly int HasVertexColor, AlphaMode, AlphaCutoff, ShowNormals;
         internal readonly int Unlit, HighlightBackfaces, BackfaceColor;
+        internal readonly int SectionActive, SectionPlane, SectionColor;
 
         internal Uniforms(GlApi gl, uint program)
         {
@@ -559,6 +569,9 @@ public sealed unsafe class GlRenderer : IDisposable
             Unlit = Find(gl, program, "uUnlit");
             HighlightBackfaces = Find(gl, program, "uHighlightBackfaces");
             BackfaceColor = Find(gl, program, "uBackfaceColor");
+            SectionActive = Find(gl, program, "uSectionActive");
+            SectionPlane = Find(gl, program, "uSectionPlane");
+            SectionColor = Find(gl, program, "uSectionColor");
         }
 
         private static int Find(GlApi gl, uint program, string name)

@@ -11,7 +11,8 @@ internal static class TestFiles
 {
     /// <summary>A 3MF holding one mesh, in whatever unit is named.</summary>
     internal static byte[] ThreeMf(ReadOnlySpan<Vector3> corners, string unit = "millimeter",
-                                   string? extraResources = null, string? build = null)
+                                   string? extraResources = null, string? build = null,
+                                   string? trianglePropertyAttributes = null)
     {
         // The corners are written as shared vertices with sequential triangles — 3MF's own shape,
         // and the reason it needs no welding.
@@ -24,7 +25,8 @@ internal static class TestFiles
             xml.Append(CultureInfo.InvariantCulture, $"""<vertex x="{p.X:R}" y="{p.Y:R}" z="{p.Z:R}"/>""");
         xml.Append("</vertices><triangles>");
         for (var i = 0; i + 2 < corners.Length; i += 3)
-            xml.Append(CultureInfo.InvariantCulture, $"""<triangle v1="{i}" v2="{i + 1}" v3="{i + 2}"/>""");
+            xml.Append(CultureInfo.InvariantCulture,
+                $"""<triangle v1="{i}" v2="{i + 1}" v3="{i + 2}"{trianglePropertyAttributes}/>""");
         xml.Append("</triangles></mesh></object></resources><build>");
         xml.Append(build ?? """<item objectid="1"/>""");
         xml.Append("</build></model>");

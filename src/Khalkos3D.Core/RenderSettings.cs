@@ -62,6 +62,24 @@ public readonly record struct RenderSettings
     /// in a real material is that colour, so it cannot be mistaken for the model.</summary>
     public Vector3 BackfaceColor { get; init; } = new(1f, 0f, 0.85f);
 
+    /// <summary>
+    /// Cut the model with a plane and look inside. Null draws it whole.
+    ///
+    /// <para>Build one with <see cref="BoundingBox.SectionAt"/>, which expresses the cut as a
+    /// fraction through the model so a viewer can offer a slider without knowing the scale.</para>
+    ///
+    /// <para><b>It is a clip, not a cap, and the difference is worth stating.</b> Fragments in front
+    /// of the plane are discarded, so what shows through the cut is the INSIDE of the far wall,
+    /// painted in <see cref="SectionColor"/> so it reads as a surface rather than as a hole. A true
+    /// cap - a flat filled face exactly where the plane crosses the solid - needs a stencil pass and
+    /// only means anything on a watertight mesh, which the files this opens frequently are not. What
+    /// is here shows walls, infill and whether a boss is solid, which is usually the question.</para>
+    /// </summary>
+    public Plane? Section { get; init; }
+
+    /// <summary>The colour the exposed interior is painted when <see cref="Section"/> is set.</summary>
+    public Vector3 SectionColor { get; init; } = new(0.85f, 0.35f, 0.12f);
+
     /// <summary>Create the defaults.</summary>
     public RenderSettings() { }
 }

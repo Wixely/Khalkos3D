@@ -403,6 +403,56 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
             $"only {differing} pixels changed when the normal map did; the map is not being applied");
     }
 
+    // ---- cross-section ----------------------------------------------------------------------
+
+    [Fact]
+    public void A_section_cuts_the_model_and_shows_its_interior()
+    {
+        // The printing question this answers: are the walls where I think they are, and is that boss
+        // solid? Half the box is discarded, and what shows through is the inside of the far wall -
+        // painted flat, so the cut reads as a surface rather than as a hole.
+        var scene = Box(new Vector3(10, 10, 10), Red);
+        var whole = Render(scene);
+
+        var camera = Camera.Frame(scene.Bounds, scene.Up);
+        var toViewer = Vector3.Normalize(camera.Position - camera.Target);
+        var cut = Render(scene, camera, new RenderSettings
+        {
+            ClearColor = Backdrop,
+            Up = scene.Up,
+            Section = scene.Bounds.SectionAt(toViewer, 0.5f),
+        });
+
+        output.WriteLine($"whole {whole.LitFraction:P1}, sectioned {cut.LitFraction:P1}");
+        Assert.True(cut.LitFraction < whole.LitFraction,
+            "the section removed nothing, so the plane is not clipping");
+        Assert.True(cut.LitFraction > 0.05f, "the section removed the entire model");
+
+        // The interior colour has to actually appear, or the cut is a hole rather than a section.
+        Assert.True(cut.CountsNear(217, 89, 31) > 200,
+            "the exposed interior was not painted, so the cut looks like a hole through the model");
+    }
+
+    [Fact]
+    public void A_section_past_the_model_removes_nothing()
+    {
+        // The ends of the 0..1 range are what a slider snaps to, so they have to be no-ops rather
+        // than surprises.
+        var scene = Box(new Vector3(10, 10, 10), Red);
+        var camera = Camera.Frame(scene.Bounds, scene.Up);
+        var toViewer = Vector3.Normalize(camera.Position - camera.Target);
+
+        var whole = Render(scene, camera);
+        var uncut = Render(scene, camera, new RenderSettings
+        {
+            ClearColor = Backdrop,
+            Up = scene.Up,
+            Section = scene.Bounds.SectionAt(toViewer, 1f),
+        });
+
+        Assert.Equal(whole.LitFraction, uncut.LitFraction, 2);
+    }
+
     // ---- resource handling ------------------------------------------------------------------
 
     [Fact]
@@ -510,6 +560,18 @@ public class RenderTests(GlFixture gl, ITestOutputHelper output)
                 if (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) > 40) changes++;
             }
             return changes;
+        }
+
+        /// <summary>How many pixels sit close to a given colour.</summary>
+        internal int CountsNear(int r, int g, int b, int tolerance = 30)
+        {
+            var count = 0;
+            for (var i = 0; i < pixels.Length; i += 4)
+                if (Math.Abs(pixels[i] - r) <= tolerance &&
+                    Math.Abs(pixels[i + 1] - g) <= tolerance &&
+                    Math.Abs(pixels[i + 2] - b) <= tolerance)
+                    count++;
+            return count;
         }
 
         /// <summary>How many pixels differ from another frame of the same size.</summary>

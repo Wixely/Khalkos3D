@@ -74,6 +74,8 @@ public static class ThreeMfReader
         // 3MF object ids are arbitrary integers, so they are mapped rather than indexed into.
         var objects = new Dictionary<int, ObjectEntry>();
         var baseMaterials = new Dictionary<int, List<Material>>();
+        // Colour groups keyed by their own id, which triangles reference through pid.
+        var palettes = new Dictionary<int, List<Vector4>>();
         var roots = new List<Node>();
         var scale = 1f;
 
@@ -102,8 +104,12 @@ public static class ThreeMfReader
                     ReadBaseMaterials(reader, baseMaterials);
                     break;
 
+                case "colorgroup":
+                    ReadColorGroup(reader, palettes);
+                    break;
+
                 case "object":
-                    ReadObject(reader, objects, meshes, report);
+                    ReadObject(reader, objects, meshes, palettes, report);
                     break;
 
                 case "item":
@@ -178,7 +184,8 @@ public static class ThreeMfReader
         string? Name, int? MeshIndex, List<(int Id, Matrix4x4 Transform)> Components);
 
     private static void ReadObject(XmlReader reader, Dictionary<int, ObjectEntry> objects,
-                                   List<Mesh> meshes, LoadReport.Builder report)
+                                   List<Mesh> meshes, Dictionary<int, List<Vector4>> palettes,
+                                   LoadReport.Builder report)
     {
         var id = ParseInt(reader.GetAttribute("id"));
         if (id is null) return;
@@ -199,7 +206,7 @@ public static class ThreeMfReader
 
             if (reader.LocalName == "mesh")
             {
-                var mesh = ReadMesh(reader, name, report);
+                var mesh = ReadMesh(reader, name, palettes, report);
                 if (mesh is not null) { meshes.Add(mesh); meshIndex = meshes.Count - 1; }
             }
             else if (reader.LocalName == "component")
@@ -212,11 +219,16 @@ public static class ThreeMfReader
         objects[id.Value] = new ObjectEntry(name, meshIndex, components);
     }
 
-    private static Mesh? ReadMesh(XmlReader reader, string? name, LoadReport.Builder report)
+    private static Mesh? ReadMesh(XmlReader reader, string? name,
+                                  Dictionary<int, List<Vector4>> palettes, LoadReport.Builder report)
     {
         var positions = new List<Vector3>(4096);
         var indices = new List<int>(8192);
-        var perTriangleMaterial = false;
+        // Per-corner palette entries, parallel to indices. -1 where a triangle named no colour.
+        var swatches = new List<int>(8192);
+        var perTrianglePid = new List<int>(2048);
+        var coloured = 0;
+        var unsupportedProperty = false;
         var dropped = 0;
 
         if (reader.IsEmptyElement) return null;
@@ -242,7 +254,26 @@ public static class ThreeMfReader
                 indices.Add(v1.Value);
                 indices.Add(v2.Value);
                 indices.Add(v3.Value);
-                if (!perTriangleMaterial && reader.GetAttribute("p1") is not null) perTriangleMaterial = true;
+
+                // pid names a property group; p1/p2/p3 index into it, once per corner. A triangle
+                // with only p1 uses that one colour for all three, which is how a flat-shaded face
+                // is written.
+                var pid = ParseInt(reader.GetAttribute("pid")) ?? -1;
+                var p1 = ParseInt(reader.GetAttribute("p1"));
+                if (p1 is null || !palettes.ContainsKey(pid))
+                {
+                    if (p1 is not null) unsupportedProperty = true;
+                    swatches.Add(-1); swatches.Add(-1); swatches.Add(-1);
+                    perTrianglePid.Add(-1);
+                }
+                else
+                {
+                    var p2 = ParseInt(reader.GetAttribute("p2")) ?? p1.Value;
+                    var p3 = ParseInt(reader.GetAttribute("p3")) ?? p1.Value;
+                    swatches.Add(p1.Value); swatches.Add(p2); swatches.Add(p3);
+                    perTrianglePid.Add(pid);
+                    coloured++;
+                }
             }
         }
 
@@ -252,6 +283,8 @@ public static class ThreeMfReader
         // offending triangles go rather than the whole mesh — a part with a few bad facets is still
         // worth looking at.
         var valid = new List<int>(indices.Count);
+        var validSwatches = new List<int>(indices.Count);
+        var validPids = new List<int>(indices.Count / 3);
         for (var i = 0; i + 2 < indices.Count; i += 3)
         {
             if ((uint)indices[i] < (uint)positions.Count &&
@@ -259,17 +292,58 @@ public static class ThreeMfReader
                 (uint)indices[i + 2] < (uint)positions.Count)
             {
                 valid.Add(indices[i]); valid.Add(indices[i + 1]); valid.Add(indices[i + 2]);
+                validSwatches.Add(swatches[i]); validSwatches.Add(swatches[i + 1]); validSwatches.Add(swatches[i + 2]);
+                validPids.Add(perTrianglePid[i / 3]);
             }
             else dropped++;
         }
 
         if (dropped > 0)
             report.Repaired("triangle", $"{dropped:N0} triangles referenced vertices that do not exist");
-        if (perTriangleMaterial)
-            report.Unsupported("per-triangle material",
-                "some triangles carry their own material; the object's material is used for all of them");
+        if (unsupportedProperty)
+            report.Unsupported("triangle properties",
+                "some triangles reference a property group that is not a colour group, and are drawn " +
+                "with the object's material instead");
 
-        var mesh = new Mesh { Positions = [.. positions], Indices = [.. valid], Name = name };
+        var outPositions = new List<Vector3>(positions.Count);
+        var outColors = coloured > 0 ? new List<Vector4>(positions.Count) : null;
+        var outIndices = new List<int>(valid.Count);
+
+        if (outColors is null)
+        {
+            outPositions.AddRange(positions);
+            outIndices.AddRange(valid);
+        }
+        else
+        {
+            // A COLOUR IS A PROPERTY OF A CORNER, NOT OF A POSITION, so two triangles meeting at a
+            // vertex with different colours need two vertices there. Splitting only where the
+            // colours actually differ keeps a single-colour object at its original vertex count,
+            // rather than tripling every mesh for a feature most files do not use.
+            var split = new Dictionary<(int Vertex, int Swatch), int>(positions.Count);
+            for (var i = 0; i < valid.Count; i++)
+            {
+                var key = (valid[i], validSwatches[i]);
+                if (!split.TryGetValue(key, out var index))
+                {
+                    outPositions.Add(positions[valid[i]]);
+                    outColors.Add(Swatch(validPids[i / 3], validSwatches[i]));
+                    split[key] = index = outPositions.Count - 1;
+                }
+                outIndices.Add(index);
+            }
+            report.Info("colour group",
+                $"{coloured:N0} triangles carried per-corner colours; " +
+                $"{outPositions.Count - positions.Count:N0} vertices were split to keep them distinct");
+        }
+
+        var mesh = new Mesh
+        {
+            Positions = [.. outPositions],
+            Indices = [.. outIndices],
+            Colors = outColors is null ? null : [.. outColors],
+            Name = name,
+        };
         return new Mesh
         {
             Positions = mesh.Positions,
@@ -279,8 +353,36 @@ public static class ThreeMfReader
             // has told us which corners are genuinely shared, and second-guessing that would undo
             // the one thing 3MF does better.
             Normals = mesh.ComputeSmoothNormals(),
+            Colors = mesh.Colors,
             Name = name,
         };
+
+        Vector4 Swatch(int pid, int index)
+        {
+            if (index < 0 || !palettes.TryGetValue(pid, out var palette)) return Vector4.One;
+            return (uint)index < (uint)palette.Count ? palette[index] : Vector4.One;
+        }
+    }
+
+    /// <summary>
+    /// A palette of colours triangles can index into — the 3MF materials extension.
+    ///
+    /// <para>This is how a multi-colour print says which parts are which filament, so dropping it
+    /// turns a two-tone model into a uniform grey one with no indication that anything was lost.</para>
+    /// </summary>
+    private static void ReadColorGroup(XmlReader reader, Dictionary<int, List<Vector4>> into)
+    {
+        var groupId = ParseInt(reader.GetAttribute("id"));
+        if (groupId is null || reader.IsEmptyElement) return;
+
+        var colours = new List<Vector4>();
+        var depth = reader.Depth;
+        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Depth == depth))
+        {
+            if (reader.NodeType != XmlNodeType.Element || reader.LocalName != "color") continue;
+            colours.Add(ParseColor(reader.GetAttribute("color")));
+        }
+        into[groupId.Value] = colours;
     }
 
     private static void ReadBaseMaterials(XmlReader reader, Dictionary<int, List<Material>> into)

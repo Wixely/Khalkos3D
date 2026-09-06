@@ -58,6 +58,29 @@ which matters because the shader deliberately flips normals towards the viewer s
 does not appear as a black hole in a part your slicer would print fine. That kindness hides the
 defect; this is how you see it.
 
+### It tells you whether a model will print
+
+```csharp
+var report = MeshAnalysis.Analyse(scene);
+Console.WriteLine(report);
+// 4,032 triangles, 0.1 x 0.05 x 0.06, 128 open edges (holes)
+
+if (MeshAnalysis.ExceedsBuildVolume(scene.Bounds, new Vector3(220, 220, 250)) is { } tooBig)
+    Console.WriteLine(tooBig);
+```
+
+Volume, surface area, and the four ways a mesh fails a slicer: open edges, non-manifold edges,
+inconsistent winding, and being wound inside out — that last one detected from the *sign* of the
+volume, because an inverted mesh is perfectly watertight and looks correct from outside.
+
+Topology is computed on positions rather than indices, which matters more than it sounds: a
+render-ready mesh has extra vertices at every hard edge, so matching by index would report every edge
+of a sound cube as a hole.
+
+**Cross-section** cuts through a part so you can see walls and infill —
+`bounds.SectionAt(direction, 0.5f)` gives a plane a slider can drive without knowing the model's
+scale.
+
 ### Materials look like materials
 
 Metallic-roughness PBR with textures, per-texture sampler state, normal maps (tangents derived when a

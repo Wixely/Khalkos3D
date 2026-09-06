@@ -86,6 +86,9 @@ internal static class ShaderSource
         uniform int   uUnlit;
         uniform int   uHighlightBackfaces;
         uniform vec3  uBackfaceColor;
+        uniform int   uSectionActive;
+        uniform vec4  uSectionPlane;
+        uniform vec3  uSectionColor;
 
         out vec4 fragColor;
 
@@ -101,6 +104,9 @@ internal static class ShaderSource
         }
 
         void main() {
+            // The cut first, before anything is computed for a fragment about to vanish.
+            if (uSectionActive == 1 && dot(vWorld, uSectionPlane.xyz) + uSectionPlane.w > 0.0) discard;
+
             vec4 base = uBaseColor;
             if (uHasTex == 1) base *= texture(uTex, vUv);
             if (uHasVertexColor == 1) base *= vColor;
@@ -120,6 +126,14 @@ internal static class ShaderSource
             // the winding as rasterised, which is the fact a user needs in order to fix their mesh.
             if (uHighlightBackfaces == 1 && !gl_FrontFacing) {
                 fragColor = vec4(uBackfaceColor, 1.0);
+                return;
+            }
+
+            // Looking through a cut means looking at the INSIDE of the far wall. Painting it flat
+            // makes the section read as a surface; leaving it shaded lights the interior as though
+            // it were outdoors, which makes a hollow model look like a rendering fault.
+            if (uSectionActive == 1 && !gl_FrontFacing) {
+                fragColor = vec4(uSectionColor, 1.0);
                 return;
             }
 

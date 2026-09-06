@@ -128,6 +128,51 @@ public class FormatTests
         Assert.Contains("zip", ex.Message);
     }
 
+    [Fact]
+    public void A_3mf_colour_group_reaches_the_mesh_as_vertex_colours()
+    {
+        // How a multi-colour print says which parts are which filament. Dropping it turns a two-tone
+        // model into a uniform grey one with nothing to indicate anything was lost.
+        const string palette = """<colorgroup id="5"><color color="#FF0000"/><color color="#0000FF"/></colorgroup>""";
+        var scene = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(
+            TestShapes.Box(Vector3.One), extraResources: palette,
+            trianglePropertyAttributes: " pid=\"5\" p1=\"0\"")));
+
+        var colors = scene.Meshes[0].Colors;
+        Assert.NotNull(colors);
+        Assert.All(colors!, c => Assert.Equal(new Vector4(1, 0, 0, 1), c));
+        Assert.Contains(scene.Report.Notes, n => n.Feature == "colour group");
+    }
+
+    [Fact]
+    public void Corners_are_split_only_where_the_colours_actually_differ()
+    {
+        // A colour belongs to a CORNER, not to a position, so two triangles meeting at a vertex in
+        // different colours need two vertices there. Splitting unconditionally would triple every
+        // mesh for a feature most files never use.
+        const string palette = """<colorgroup id="5"><color color="#FF0000"/></colorgroup>""";
+        var uniform = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(
+            TestShapes.Box(Vector3.One), extraResources: palette,
+            trianglePropertyAttributes: " pid=\"5\" p1=\"0\"")));
+
+        // Every triangle names the same swatch, so no vertex needs splitting beyond what the file
+        // already had.
+        var plain = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(TestShapes.Box(Vector3.One))));
+        Assert.Equal(plain.Meshes[0].VertexCount, uniform.Meshes[0].VertexCount);
+        Assert.Equal(12, uniform.TriangleCount);
+    }
+
+    [Fact]
+    public void A_property_group_that_is_not_a_colour_is_reported_rather_than_guessed_at()
+    {
+        var scene = ThreeMfReader.Read(new MemoryStream(TestFiles.ThreeMf(
+            TestShapes.Box(Vector3.One), trianglePropertyAttributes: " pid=\"99\" p1=\"0\"")));
+
+        Assert.Null(scene.Meshes[0].Colors);
+        Assert.True(scene.Report.HasUnsupported);
+        Assert.Contains(scene.Report.Notes, n => n.Feature == "triangle properties");
+    }
+
     // ---- glTF -----------------------------------------------------------------------------
 
     private static readonly Vector3[] TrianglePositions =

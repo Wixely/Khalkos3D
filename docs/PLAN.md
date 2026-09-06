@@ -155,12 +155,47 @@ normals towards the viewer so an inverted facet shades like its neighbours rathe
 black hole in a part the slicer would print fine — which is right, and which also means a user who
 wants to FIX their mesh cannot see the problem. This is how they see it.
 
-### M3 · Printing — **1–2 weeks**
+### M3 · Printing — **done, except toolpaths**
 
-The use case that motivated the project. Measurement and a scale bar (units are already carried),
-cross-section against an arbitrary plane, per-triangle colours from 3MF colour groups, and toolpath
-display — `PrimitiveKind.Lines` is already in the model for exactly this, so a G-code preview is a
-parser plus a line renderer rather than an architecture change.
+`MeshAnalysis` (measurement and printability), `BoundingBox.SectionAt` with `RenderSettings.Section`,
+and 3MF colour groups.
+
+**`MeshAnalysis` answers the question the whole project is for: would this print?** Volume, surface
+area, and the four ways a mesh fails a slicer — open edges, non-manifold edges, inconsistent winding,
+and being wound inside out. Plus `ExceedsBuildVolume`, which compares a part against a bed both ways
+round, because a part can be turned on the plate but cannot be made shorter.
+
+Two things in it are less obvious than they look:
+
+- **Topology is computed on POSITIONS, not on indices.** A mesh prepared for rendering has extra
+  vertices wherever a hard edge needed its own normal — `MeshWelder` splits a cube's eight corners
+  into twenty-four — so matching edges by index reports every edge of a sound cube as a hole. A viewer
+  doing that would tell its user their file is broken when it is not.
+- **Inside-out is detected from the SIGN of the volume**, because nothing else gives it away: a
+  consistently inverted mesh is perfectly watertight, and once the shader flips normals towards the
+  viewer it looks correct from outside. A slicer may then fill what should be hollow.
+
+Run against the real teapot it reports **128 open edges**, which is correct — the 3ds Max teapot
+primitive is an open surface, not a solid. Finding that on a real file is the point.
+
+**The section is a clip, not a cap, and the documentation says so.** Fragments in front of the plane
+are discarded and the exposed interior is painted flat, so the cut reads as a surface rather than a
+hole. A true cap needs a stencil pass and only means anything on a watertight mesh — which, as the
+teapot demonstrates, real files frequently are not. What is here shows walls, infill, and whether a
+boss is solid, which is usually the question.
+
+**3MF colour groups** now reach the mesh as vertex colours, with corners split only where the colours
+actually differ — a colour belongs to a corner rather than to a position, but splitting
+unconditionally would triple every mesh for a feature most files never use.
+
+#### Toolpaths are deliberately not here
+
+`PrimitiveKind.Lines` is still in the model for them, and the renderer draws lines today. What is
+missing is the parser, and it is deferred rather than forgotten because **G-code is a different kind
+of input**: not a model but a machine program, in a dialect that varies by slicer and firmware, whose
+useful display needs feature classification (perimeter, infill, support, travel) rather than
+geometry. That is its own decision with its own scope, and bundling it into "printing features"
+would have been the kind of quiet scope creep this plan named as a risk at the start.
 
 ### M4 · Textures and environment — **done**
 

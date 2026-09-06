@@ -202,13 +202,55 @@ public class TeapotTests(GlFixture gl, ITestOutputHelper output)
         // measured. A model rendering grey would mean the texture is not reaching the shader.
         Assert.True(mean.X > mean.Z, $"mean {mean} has no warmth, so the texture is probably not sampled");
 
-        // And a photograph of what actually happened, for a human to look at.
-        var file = System.IO.Path.Combine(AppContext.BaseDirectory, "teapot-render.png");
-        using (var image = SKImage.FromPixelCopy(
-            new SKImageInfo(Size, Size, SKColorType.Rgba8888, SKAlphaType.Premul), pixels))
-        using (var data = image.Encode(SKEncodedImageFormat.Png, 95))
-        using (var stream = File.Create(file))
-            data.SaveTo(stream);
-        output.WriteLine($"wrote {file}");
+        WritePng(pixels, "teapot-render.png");
+        output.WriteLine("wrote teapot-render.png");
+    }
+
+    [Fact]
+    public void A_real_model_can_be_sectioned_and_measured()
+    {
+        // The two printing questions on one real file: what is inside it, and would it print.
+        Assert.True(gl.GetProcAddress is not null, $"these tests need a GL context: {gl.Unavailable}");
+        var scene = Load();
+
+        var report = MeshAnalysis.Analyse(scene);
+        output.WriteLine($"analysis: {report}");
+        if (report.Problem() is { } problem) output.WriteLine($"  would not print cleanly: {problem}");
+        Assert.True(report.Triangles > 0);
+        Assert.True(report.SurfaceArea > 0f);
+
+        using var renderer = GlRenderer.Create(gl.GetProcAddress!, out var error);
+        Assert.True(renderer is not null, error);
+        using var target = GlOffscreenTarget.Create(gl.GetProcAddress!, Size, Size, out _);
+        target!.Bind();
+
+        var camera = Camera.Frame(scene.Bounds, scene.Up, yaw: 0.9f, pitch: 0.35f, zoom: 0.85f);
+        var toViewer = Vector3.Normalize(camera.Position - camera.Target);
+        renderer!.Draw(scene, camera, Size, Size, new RenderSettings
+        {
+            ClearColor = new Vector4(0f, 0f, 0f, 1f),
+            Up = scene.Up,
+            Section = scene.Bounds.SectionAt(toViewer, 0.55f),
+        });
+        var pixels = target.ReadPixels();
+        target.Unbind();
+
+        var lit = 0;
+        for (var i = 0; i < pixels.Length; i += 4)
+            if (pixels[i] > 12 || pixels[i + 1] > 12 || pixels[i + 2] > 12) lit++;
+        Assert.True(lit > Size * Size / 40, "the section removed the whole teapot");
+
+        WritePng(pixels, "teapot-section.png");
+        output.WriteLine("wrote teapot-section.png");
+    }
+
+    private static void WritePng(byte[] pixels, string name)
+    {
+        var file = System.IO.Path.Combine(AppContext.BaseDirectory, name);
+        using var image = SKImage.FromPixelCopy(
+            new SKImageInfo(Size, Size, SKColorType.Rgba8888, SKAlphaType.Premul), pixels);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 95);
+        using var stream = File.Create(file);
+        data.SaveTo(stream);
     }
 }
