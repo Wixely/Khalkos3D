@@ -164,7 +164,8 @@ public static class ObjReader
         }
 
         if (mesh.Validate() is { } bad) throw new ModelFormatException($"the OBJ produced an invalid mesh: {bad}");
-        return Scene.FromMesh(mesh, options.Material, report.Build());
+        // Y-up: OBJ has no statement either, but it comes out of content tools rather than CAD.
+        return Scene.FromMesh(mesh, options.Material, report.Build(), UpAxis.Y);
 
         int Emit(int vi, int ti, int ni)
         {

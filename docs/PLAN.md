@@ -97,21 +97,37 @@ already have one, and skipping textures is a fully supported outcome that the lo
 (binary + ASCII), OBJ, 3MF and glTF 2.0 / GLB; format sniffing; 49 tests. No GPU needed to test any
 of it, which is why it went first.
 
-### M1 · The renderer — **next, 1–2 weeks**
+### M1 · The renderer — **mostly done**
 
-The smallest thing that draws a `Scene` correctly on all six targets.
+`StannumFab.Gl` draws a `Scene`, verified against a real driver (NVIDIA GL 3.3 core locally, Mesa
+llvmpipe on CI).
 
-- `IRenderBackend` seam, one implementation: `StannumFab.Gl`
-- Instanced entry-point table built from a supplied `Func<string, nint>`
-- Buffer and texture upload with a per-mesh cache, so a plate of twenty instances uploads once
-- Cook-Torrance metallic-roughness, one directional light, a flat ambient term
-- Depth, correct winding, `doubleSided`, `alphaMode` MASK
-- Framebuffer target sized by the caller, with resize and disposal contracts
-- Driver state left in a documented condition before and after — see the [state discipline](#state-discipline) note
+Done: instanced entry-point table from a supplied `Func<string, nint>` · Cook-Torrance
+metallic-roughness with one directional light and a flat ambient term · depth, winding,
+`doubleSided`, `alphaMode` MASK and sorted BLEND · interleaved vertex upload cached per `Mesh`, so a
+plate of twenty instances uploads once · textures cached per `ImageData` · `Camera` with
+fit-to-bounds, orbit and zoom · wireframe and normals debug views · `GlOffscreenTarget` for headless
+rendering · the enforced state reset from the [state discipline](#state-discipline) note.
 
-**Verification is the hard part, not the code.** Rendering is not unit-testable; the plan is a
-headless offscreen render on CI (Linux + Mesa under `xvfb`) comparing against committed reference
-images with a tolerance. Getting that gate working is genuinely half of M1.
+Two decisions worth recording, both cases of unified beating fastest:
+
+- **Wireframe is an edge index buffer, not `glPolygonMode`** — which does not exist in OpenGL ES or
+  WebGL2, so the obvious implementation would work on a desktop and silently do nothing on four of
+  the six targets.
+- **`Camera.Frame` fits whichever field of view is narrower.** A perspective projection is specified
+  vertically, so a PORTRAIT viewport has a narrower horizontal field and a vertical-only fit clips the
+  model at the sides. Found by a test, not by a phone.
+
+Still open: an `IRenderBackend` interface (there is one backend, and inventing the seam before the
+second one exists would be guessing at its shape), and image comparison.
+
+**Verification turned out to split in two, and the estimate was wrong about which half was hard.**
+Property assertions — the box occludes what is behind it, the model stays inside the frame, an
+inverted facet still shades — were quick and are what actually catch regressions. Reference-image
+comparison is the part still outstanding, and it is deliberately not rushed: an exact PNG fails on any
+driver that rounds differently, which across six targets means failing for reasons that are not
+defects. It needs a tolerance calibrated against more than one driver, so it waits until there is more
+than one to calibrate against.
 
 ### M2 · Viewer essentials — **1 week**
 

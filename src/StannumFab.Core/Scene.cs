@@ -61,6 +61,18 @@ public sealed class Scene
     /// see <see cref="LoadReport"/> for why it is a first-class part of the result.</summary>
     public LoadReport Report { get; init; } = LoadReport.Empty;
 
+    /// <summary>
+    /// Which axis this file treats as up, as its FORMAT defines it rather than as anything in the
+    /// geometry says.
+    ///
+    /// <para>Carried because the formats disagree and a viewer that ignores it lays every printed
+    /// part on its side: glTF is Y-up, while STL and 3MF are Z-up by the universal convention of CAD
+    /// and slicing. Nothing is rotated to match — the mesh stays exactly as written, which is what
+    /// keeps a round trip lossless — but <see cref="Camera.Frame"/> reads this so the default view is
+    /// the one the author intended.</para>
+    /// </summary>
+    public UpAxis Up { get; init; } = UpAxis.Y;
+
     /// <summary>Total triangles across every mesh, counted once per mesh rather than per
     /// instance.</summary>
     public int TriangleCount
@@ -116,12 +128,14 @@ public sealed class Scene
     }
 
     /// <summary>A scene holding one mesh — what every flat format produces, spelled once.</summary>
-    public static Scene FromMesh(Mesh mesh, Material? material = null, LoadReport? report = null) =>
+    public static Scene FromMesh(Mesh mesh, Material? material = null, LoadReport? report = null,
+                                 UpAxis up = UpAxis.Y) =>
         new()
         {
             Meshes = [mesh],
             Materials = material is null ? [] : [material],
             Roots = [new Node { Name = mesh.Name, Mesh = 0, Material = material is null ? null : 0 }],
             Report = report ?? LoadReport.Empty,
+            Up = up,
         };
 }

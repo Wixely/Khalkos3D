@@ -2,8 +2,10 @@
   <Folder Name="/src/">
     <Project Path="src/StannumFab.Core/StannumFab.Core.csproj" />
     <Project Path="src/StannumFab.Formats/StannumFab.Formats.csproj" />
+    <Project Path="src/StannumFab.Gl/StannumFab.Gl.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/StannumFab.Tests/StannumFab.Tests.csproj" />
+    <Project Path="tests/StannumFab.RenderTests/StannumFab.RenderTests.csproj" />
   </Folder>
 </Solution>

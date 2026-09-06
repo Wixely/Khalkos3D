@@ -128,6 +128,8 @@ public static class GltfReader
                 Images = _images,
                 Roots = roots,
                 Report = report.Build(),
+                // The specification is explicit: glTF is Y-up.
+                Up = UpAxis.Y,
             };
         }
 

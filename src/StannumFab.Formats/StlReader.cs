@@ -55,7 +55,9 @@ public static class StlReader
         // STL carries no material at all, so one is invented — and said so, because a user comparing
         // this against their slicer's preview deserves to know the colour is ours and not theirs.
         report.Info("material", "STL stores no material; a neutral default was used");
-        return Scene.FromMesh(mesh, options.Material, report.Build());
+        // Z-up: STL says nothing about orientation, but every CAD package and slicer that writes one
+        // puts the build plate in XY. Assuming Y-up here would stand each part on its side.
+        return Scene.FromMesh(mesh, options.Material, report.Build(), UpAxis.Z);
     }
 
     /// <summary>

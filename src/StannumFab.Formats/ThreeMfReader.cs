@@ -150,6 +150,8 @@ public static class ThreeMfReader
             Materials = materials.Count > 0 ? materials : [options.Material ?? Material.Default],
             Roots = roots,
             Report = report.Build(),
+            // Z-up, and unlike STL the specification says so: 3MF puts the build plate in XY.
+            Up = UpAxis.Z,
         };
 
         Node BuildNode(int id, Matrix4x4 transform)

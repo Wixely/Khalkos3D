@@ -9,7 +9,8 @@ Console.WriteLine($"{scene.TriangleCount:N0} triangles, {scene.Bounds}");
 if (scene.Report.Summary is { } warning) Console.WriteLine(warning);
 ```
 
-**Status: the asset layer works and is tested. There is no renderer yet** — see [the plan](docs/PLAN.md).
+**Status: the asset layer and the renderer both work and are tested against a real driver.** See
+[the plan](docs/PLAN.md) for what is next.
 
 ---
 
@@ -28,12 +29,20 @@ entire world to get it.
 
 | | |
 |---|---|
-| **`StannumFab.Core`** | `Mesh`, `Material`, `Scene`, `BoundingBox`, and the vertex welder — **zero dependencies** |
-| **`StannumFab.Formats`** | STL, OBJ, 3MF and glTF 2.0 / GLB, all producing the same `Scene` — **zero dependencies** |
+| **`StannumFab.Core`** | `Mesh`, `Material`, `Scene`, `BoundingBox`, `Camera`, and the vertex welder |
+| **`StannumFab.Formats`** | STL, OBJ, 3MF and glTF 2.0 / GLB, all producing the same `Scene` |
+| **`StannumFab.Gl`** | draws it — desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source |
 
-Both are pure managed C# with nothing outside the BCL, so they compile for every target including
-WebAssembly, where a native parser would mean a per-platform build matrix for what is, in the end,
-reading bytes.
+**All three have zero dependencies.** Nothing outside the BCL, so the asset layer compiles for every
+target including WebAssembly — where a native parser would mean a per-platform build matrix for what
+is, in the end, reading bytes — and the renderer creates no window and no context, so it embeds
+wherever there is already one.
+
+```csharp
+// The renderer is handed a proc-address function and draws into whatever framebuffer is bound.
+var renderer = GlRenderer.Create(getProcAddress, out var error);
+renderer?.Draw(scene, Camera.Frame(scene.Bounds, scene.Up), width, height);
+```
 
 ```csharp
 // Every format, one type, and the caller never learns which parser ran.
@@ -73,20 +82,33 @@ result but a wrong one.
 MIT, and it intends to stay that way. Dependencies are held to a policy: permissive only, nothing
 that would force a licence change on anyone who uses this. See [docs/LICENSING.md](docs/LICENSING.md).
 
-Today the count is zero — `Core` and `Formats` use nothing but the BCL.
+Today the count is zero. `Core`, `Formats` and `Gl` all use nothing but the BCL — the renderer's GL
+entry points are function pointers resolved from a delegate the host supplies, not a binding library.
 
 ## Using it with CupriFace
 
 [CupriFace](https://github.com/Wixely/CupriFace) is an HTML/CSS UI engine with a `CupriFace.Gl`
-package that binds a GL viewport to a page element on every host. StannumFab is designed to drop into
-that seam once its renderer exists — roughly thirty lines of glue, in the app rather than in either
-library. Neither depends on the other; see [the plan](docs/PLAN.md#cupriface).
+package that binds a GL viewport to a page element on every host. Its `IGlContent` interface hands
+over a proc-address function and a size, which is exactly what `GlRenderer` wants — so the glue is
+about thirty lines.
+
+**Neither library depends on the other, and the glue lives in CupriFace's repository rather than
+here** — a general-purpose engine depending on a UI toolkit would invert the direction. It also
+waits: not for the renderer to draw *something*, but for parity with CupriFace's existing `Demo3d`,
+which is a textured glTF model under a metallic-roughness shader composited behind live UI on three
+hosts. Replacing a working demo with a worse one is not progress. See
+[the plan](docs/PLAN.md#cupriface).
 
 ## Building
 
 ```
 dotnet build StannumFab.slnx
-dotnet test tests/StannumFab.Tests
+dotnet test tests/StannumFab.Tests          # no GPU needed; runs anywhere
+dotnet test tests/StannumFab.RenderTests    # needs a GL context (xvfb-run on a headless Linux box)
 ```
 
 Requires the .NET 10 SDK. Warnings are errors.
+
+The two test projects are separate on purpose: the first must run on any machine, including one with
+no GL at all, and merging them would make the fast portable suite unrunnable wherever the
+driver-bound one cannot start.

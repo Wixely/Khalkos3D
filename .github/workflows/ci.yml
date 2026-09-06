@@ -31,6 +31,36 @@ jobs:
       - name: Test
         run: dotnet test tests/StannumFab.Tests -c Release --no-build --logger "console;verbosity=normal"
 
+  render:
+    name: The renderer draws, on a real driver
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # A GL stack and a display to attach it to. llvmpipe is software rasterisation, which is
+      # honest about what it proves: the code path and the API usage, NOT the driver. Every rendering
+      # defect in the related CupriFace work passed a check like this one and was found by a person
+      # holding a phone. This gate catches regressions; it does not certify hardware.
+      - name: Install Mesa and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1 libglx-mesa0 libgl1-mesa-dri libglfw3
+
+      # Printed before the tests so that a failure to get a context is diagnosable from this log
+      # rather than from a local reproduction. That lesson was learned the expensive way on the wasm
+      # job below.
+      - name: What GL is available here
+        run: xvfb-run -a glxinfo -B || echo "glxinfo failed; the tests will report the details"
+
+      - name: Render
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          xvfb-run -a dotnet test tests/StannumFab.RenderTests -c Release --logger "console;verbosity=normal"
+
   dependencies:
     name: The shipped libraries depend on nothing
     runs-on: ubuntu-latest
