@@ -105,36 +105,60 @@ jobs:
           sed -i "s|REPO|$GITHUB_WORKSPACE|" probe.csproj
 
           cat > Probe.cs <<'PROBE'
+          using System;
           using System.IO;
           using StannumFab;
           using StannumFab.Formats;
 
           public static class Probe
           {
-              // Every reader is touched, so the analyser sees each one from a browser-targeted
-              // compilation and the trimmer cannot decide none of it is reachable.
-              public static string Run(byte[] bytes)
+              // Called FROM Main, and that is load-bearing rather than tidy. A wasm publish trims,
+              // and a method nothing reaches is a method ILLink deletes — along with the whole
+              // assembly. An empty Main left the bundle with no StannumFab in it at all, which the
+              // check below correctly reported as a failure.
+              //
+              // So this doubles as a trimming gate: every reader has to survive being linked into a
+              // browser app, which is a property a consumer cares about and nothing else here tests.
+              public static void Main()
               {
-                  var scene = ModelReader.Read(bytes, "stl");
-                  _ = StlReader.Read(new MemoryStream(bytes));
-                  _ = ObjReader.Read(new MemoryStream(bytes));
-                  _ = ThreeMfReader.Read(new MemoryStream(bytes));
-                  _ = GltfReader.Read(bytes);
-                  _ = MeshWelder.Weld(scene.Meshes[0], out _);
-                  return $"{scene.TriangleCount} {scene.Bounds} {BoundingBox.Empty.IsEmpty}";
-              }
+                  var bytes = new byte[]
+                  {
+                      // A one-triangle ASCII STL, so the call is real rather than a throw the
+                      // trimmer might still see through.
+                      0x73, 0x6F, 0x6C, 0x69, 0x64, 0x20, 0x78, 0x0A,
+                  };
+                  try
+                  {
+                      var scene = ModelReader.Read(bytes, "stl");
+                      Console.WriteLine($"{scene.TriangleCount} {scene.Bounds} {BoundingBox.Empty.IsEmpty}");
+                      Console.WriteLine(MeshWelder.Weld(scene.Meshes[0], out _).VertexCount);
+                  }
+                  catch (ModelFormatException e) { Console.WriteLine(e.Message); }
 
-              public static void Main() { }
+                  // Referenced so every reader is rooted; never executed.
+                  Console.WriteLine(string.Join(',',
+                      nameof(StlReader), nameof(ObjReader), nameof(ThreeMfReader), nameof(GltfReader)));
+                  if (bytes.Length > 1000)
+                  {
+                      _ = StlReader.Read(new MemoryStream(bytes));
+                      _ = ObjReader.Read(new MemoryStream(bytes));
+                      _ = ThreeMfReader.Read(new MemoryStream(bytes));
+                      _ = GltfReader.Read(bytes);
+                  }
+              }
           }
           PROBE
 
           dotnet publish -c Release
 
           # The link really carried our assemblies into the bundle, rather than merely compiling
-          # them. Matched by NAME rather than by exact filename: the extension depends on whether
-          # Webcil is on, which varies by SDK and configuration, and pinning it made this gate fail
-          # on a publish that had in fact succeeded. The listing is printed either way, so a future
-          # failure here is diagnosable from the log instead of needing a local reproduction.
+          # them — which is the assertion that caught the empty Main above, when the bundle came out
+          # holding the framework and probe.wasm and nothing of ours at all.
+          #
+          # Matched by name and counted rather than by exact filename, because the extension depends
+          # on whether Webcil is enabled and that varies by SDK. The listing prints unconditionally:
+          # the first failure here needed a local reproduction to understand, which is exactly what a
+          # gate's log should make unnecessary.
           bundle=bin/Release/net10.0-browser/browser-wasm/AppBundle
           echo "--- bundle contents ---"
           find "$bundle" -name 'StannumFab.*' -printf '%P\n' | sort
