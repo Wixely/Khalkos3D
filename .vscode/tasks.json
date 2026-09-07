@@ -1,0 +1,108 @@
+{
+  // Ctrl+Shift+B builds the desktop demo; the rest are run from Tasks: Run Task.
+  //
+  // The Android entries are shell commands rather than a launch configuration on purpose. That app
+  // is a plain net10.0-android project, not MAUI, so VS Code has nothing to attach to — what it
+  // needs is the workload, a device, and an install. These are the same commands CI runs, so a
+  // green run here means the same thing that job means.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build the desktop demo",
+      "detail": "The Silk.NET-hosted viewer, Debug — what F5 launches.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/samples/Khalkos3D.DesktopDemo/Khalkos3D.DesktopDemo.csproj",
+        "-c",
+        "Debug",
+        // Without this the terminal renders MSBuild's progress redraws as line noise.
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent", "clear": true }
+    },
+    {
+      "label": "run the desktop demo",
+      "detail": "The same thing without the debugger attached, on the built-in showcase scene.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/samples/Khalkos3D.DesktopDemo"],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "build everything",
+      "detail": "The solution: the three libraries, the shared demo, the desktop host, both test suites.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/Khalkos3D.slnx",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run the tests",
+      "detail": "The portable suite: no GPU, no window, runs anywhere.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/tests/Khalkos3D.Tests"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "run the render tests",
+      "detail": "The driver-bound suite. Needs a real GL context, which is why it is not the default test task.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/tests/Khalkos3D.RenderTests"],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "android: install the workload",
+      "detail": "Once per machine. Without it the Android project fails with NETSDK1147 before compiling.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["workload", "install", "android", "--skip-manifest-update"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "android: run on a connected device",
+      "detail": "Builds, installs and starts the demo on the attached phone or emulator (adb devices should list one).",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/samples/Khalkos3D.AndroidDemo/Khalkos3D.AndroidDemo.csproj",
+        "-t:Run"
+      ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "android: publish an installable APK",
+      "detail": "arm64 Release into artifacts/android. Sideload the *-Signed.apk; the unsigned one will not install.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "${workspaceFolder}/samples/Khalkos3D.AndroidDemo/Khalkos3D.AndroidDemo.csproj",
+        "-c",
+        "Release",
+        "-r",
+        "android-arm64",
+        "-o",
+        "${workspaceFolder}/artifacts/android"
+      ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

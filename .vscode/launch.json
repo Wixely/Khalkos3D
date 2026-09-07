@@ -1,0 +1,60 @@
+{
+  // F5 runs the demo. The three configurations differ only in what gets shown:
+  //
+  //   - nothing on the command line, so DemoScene.Showcase() draws the built-in scene;
+  //   - a path typed at launch;
+  //   - whatever model file is open in the editor, which is the fast way to check one file.
+  //
+  // Only the desktop sample appears here. Khalkos3D.Demo is a library with no host in it and
+  // nothing to launch, and Khalkos3D.AndroidDemo needs a device and an APK install rather than a
+  // process on this machine — see .vscode/tasks.json for that one.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "The demo, built-in showcase",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build the desktop demo",
+      // The assembly is khalkos3d-demo, not the project name: the csproj renames it so the thing
+      // people run on a command line is not capitalised and dotted.
+      "program": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo/bin/Debug/net10.0/khalkos3d-demo.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo",
+      // The demo prints its driver, its triangle count and the loader's notes before drawing, and
+      // the internal console swallows that. The terminal is where the report is meant to be read.
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "The demo, a model file you pick",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build the desktop demo",
+      "program": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo/bin/Debug/net10.0/khalkos3d-demo.dll",
+      "args": ["${input:modelPath}"],
+      "cwd": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "The demo, the model open in the editor",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build the desktop demo",
+      "program": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo/bin/Debug/net10.0/khalkos3d-demo.dll",
+      // ${file} is the active editor, so selecting a .stl/.3mf/.glb in the explorer and pressing F5
+      // views it. ModelReader sniffs the format from the bytes, so the extension need not be right.
+      "args": ["${file}"],
+      "cwd": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "modelPath",
+      "type": "promptString",
+      "description": "Path to a model (.stl, .3mf, .obj, .glb — whatever it can read)"
+    }
+  ]
+}

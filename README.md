@@ -138,6 +138,10 @@ dotnet run --project samples/Khalkos3D.DesktopDemo              # the built-in s
 dotnet run --project samples/Khalkos3D.DesktopDemo -- model.glb # or any file it reads
 ```
 
+Or open the folder in VS Code and press **F5** — the checked-in launch configurations run the
+showcase, a path you type, or the model file open in the editor, and `Tasks: Run Task` carries the
+tests and the Android install for a connected device.
+
 Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. **W** wireframe, **N** normals,
 **B** highlight back-faces, **R** reset the view. On Android the same gestures apply: one finger
 orbits, two pinch and pan.

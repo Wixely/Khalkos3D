@@ -1,7 +1,13 @@
 bin/
 obj/
 .vs/
-.vscode/
+# The editor's own state is noise, but launch.json and its friends are how the samples are run
+# from VS Code — checked in so F5 works on a fresh clone rather than living in three people's
+# heads.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 .idea/
 *.user
 *.suo

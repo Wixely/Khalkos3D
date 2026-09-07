@@ -1,0 +1,5 @@
+{
+  // The C# extension supplies the coreclr debugger the launch configurations ask for; without it
+  // F5 offers no way to run these. Everything else here is plain dotnet CLI.
+  "recommendations": ["ms-dotnettools.csharp"]
+}
