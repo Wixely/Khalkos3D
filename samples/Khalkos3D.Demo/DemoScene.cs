@@ -50,19 +50,40 @@ public static class DemoScene
 
         float grainAt(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 
-        void surface(inout Surface s) {
-            // A streak is a lane: constant along the brush and changing across it, which is what
-            // makes the grain directional rather than noise.
-            float lane = floor(s.object.y * uLanes);
+        // One pass of the brush, FILTERED AGAINST THE PIXEL GRID.
+        //
+        // A streak is a lane: constant along the brush and changing across it, which is what makes
+        // the grain directional rather than noise. The filtering is the part that matters at this
+        // density — fwidth says how many lanes fall inside one pixel, and once that passes about one
+        // there is nothing left to resolve, so drawing the lanes anyway produces sparkle rather than
+        // detail. Fading each pass towards its own mean as it reaches that limit is what lets the
+        // grain be genuinely fine: sharp when the camera is close, smooth when it is not, and never
+        // the shimmering mess that a high frequency drawn unfiltered gives.
+        float brushPass(vec3 at, float lanes, float along) {
+            float across = at.y * lanes;
+            float lane = floor(across);
             float grain = mix(grainAt(lane), grainAt(lane * 2.7 + 5.1), 0.5);
 
             // A slow variation ALONG the streak as well, so it is not a perfectly even line — real
             // brushing wanders.
-            float along = 0.5 + 0.5 * sin(s.object.x * uAlong + lane * 11.0);
-            float streak = mix(grain, grain * along, 0.4);
+            float wander = 0.5 + 0.5 * sin(at.x * along + lane * 11.0);
+            float streak = mix(grain, grain * wander, 0.4);
+
+            float clarity = clamp(1.0 - fwidth(across) * 0.75, 0.0, 1.0);
+            return mix(0.5, streak, clarity);
+        }
+
+        void surface(inout Surface s) {
+            // Three passes an octave or so apart, which is what a brushed surface actually carries:
+            // fine scratches from the abrasive, a coarser rhythm from the pass of the tool, and a
+            // broad unevenness across the sheet. One frequency alone reads as corduroy.
+            float fine   = brushPass(s.object, uLanes,         uAlong);
+            float medium = brushPass(s.object, uLanes * 0.28,  uAlong * 0.7);
+            float coarse = brushPass(s.object, uLanes * 0.085, uAlong * 0.4);
+            float streak = fine * 0.46 + medium * 0.34 + coarse * 0.20;
 
             s.metallic = 1.0;
-            s.baseColor.rgb = uCopper * (1.00 + 0.25 * streak);
+            s.baseColor.rgb = uCopper * (0.75 + 0.50 * streak);
             s.roughness = clamp(0.14 + 0.30 * streak, 0.05, 1.0);
             s.normal = normalize(s.normal + uUpAxis * (streak - 0.5) * 0.22);
 
@@ -98,9 +119,12 @@ public static class DemoScene
             // one that lifts the whole face the way a metal reads brighter than its surroundings.
             // With only the narrow lobe the metal is dark between glints and looks like grained wood.
             float broad = pow(max(0.0, 1.0 - axis * axis), 12.0);
-            vec3 gleam = mix(uCopper, vec3(1.0), 0.12);
+            vec3 gleam = mix(uCopper, vec3(1.0), 0.06);
 
-            s.emissive += gleam * uLightColor * (sheen * 0.55 + broad * 0.22) * (0.3 + 0.7 * streak);
+            // Kept under the tone mapper's shoulder on purpose. Reinhard compresses a channel that
+            // is already near 1 far harder than the others, so pushing the sheen for brightness
+            // desaturates the copper into salmon — the metal gets paler the more it gleams.
+            s.emissive += gleam * uLightColor * (sheen * 0.42 + broad * 0.10) * (0.25 + 0.75 * streak);
         }
         """, name: "brushed copper");
 
@@ -195,9 +219,9 @@ public static class DemoScene
                 Shader = Brushed,
                 ShaderValues = new Dictionary<string, ShaderValue>
                 {
-                    ["uLanes"] = 90f / bounds.Size.Y,   // about one streak per two pixels at demo size
+                    ["uLanes"] = 1600f / bounds.Size.Y,   // the finest pass; it resolves when you zoom in
                     ["uAlong"] = MathF.Tau * 14f / bounds.Size.X,
-                    ["uCopper"] = new Vector3(0.98f, 0.50f, 0.28f),
+                    ["uCopper"] = new Vector3(0.86f, 0.36f, 0.15f),
                 },
             },
         };
