@@ -55,11 +55,17 @@ public sealed class DemoViewer : IDisposable
         Environment = Khalkos3D.Environment.Studio with { Intensity = 0.55f },
     };
 
-    /// <summary>How much of the fitted distance the demo opens at. Closer than the fit, because the
-    /// fit surrounds EVERYTHING — the outer ring of cubes and the haze around them — while the thing
+    /// <summary>
+    /// How much of the fitted distance the demo opens at. Closer than the fit, because the fit
+    /// surrounds EVERYTHING — the outer ring of cubes and the haze around them — while the thing
     /// worth looking at is in the middle of that. A viewer framing an unfamiliar file should still
-    /// use the whole distance; this one knows what its scene contains.</summary>
-    private const float Opening = 0.66f;
+    /// use the whole distance; this one knows what its scene contains.
+    ///
+    /// <para>0.55 is the tightest value that never cuts anything off, checked by sweeping a whole
+    /// revolution of the rings — 33 seconds — rather than by looking at the opening frame. The
+    /// difference matters: everything fits at 0.5 for the first two seconds and then does not.</para>
+    /// </summary>
+    private const float Opening = 0.55f;
 
     private int _width = 1, _height = 1;
 
