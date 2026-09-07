@@ -1,10 +1,12 @@
 {
   // Ctrl+Shift+B builds the desktop demo; the rest are run from Tasks: Run Task.
   //
-  // The Android entries are shell commands rather than a launch configuration on purpose. That app
-  // is a plain net10.0-android project, not MAUI, so VS Code has nothing to attach to — what it
-  // needs is the workload, a device, and an install. These are the same commands CI runs, so a
-  // green run here means the same thing that job means.
+  // The Android and wasm entries are shell commands rather than launch configurations on purpose.
+  // Neither is something VS Code can attach to: the Android app is a plain net10.0-android project
+  // rather than MAUI, and the wasm probe is a link-time gate whose whole result is whether it
+  // built. What they need is a workload and a command. These are the same commands CI runs, so a
+  // green run here means the same thing that job means — and the two wasm modes are both here
+  // because they fail differently: the interpreter tolerates things the AOT compiler will not.
   "version": "2.0.0",
   "tasks": [
     {
@@ -61,6 +63,45 @@
       "type": "process",
       "command": "dotnet",
       "args": ["test", "${workspaceFolder}/tests/Khalkos3D.RenderTests"],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "wasm: install the tooling",
+      "detail": "Once per machine. Brings emscripten with it, which is what compiles the runtime.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["workload", "install", "wasm-tools", "--skip-manifest-update"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "wasm: link for the browser (Mono)",
+      "detail": "What a browser app normally ships: the asset layer trimmed into a wasm bundle, interpreted.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
+        "-c",
+        "Release"
+      ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "wasm: link for the browser (Mono + LLVM)",
+      "detail": "The same thing AOT-compiled through LLVM. Minutes rather than seconds, and it fails on things the interpreter tolerates.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
+        "-c",
+        "Release",
+        "-p:RunAOTCompilation=true",
+        "-p:WasmEnableLLVM=true"
+      ],
       "problemMatcher": "$msCompile",
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },

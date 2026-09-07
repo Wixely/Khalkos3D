@@ -321,3 +321,20 @@ Requires the .NET 10 SDK. Warnings are errors.
 The two test projects are separate on purpose: the first must run on any machine, including one with
 no GL at all, and merging them would make the fast portable suite unrunnable wherever the
 driver-bound one cannot start.
+
+Two more gates need a workload, so they sit outside the solution and have their own CI jobs — and
+their own tasks in VS Code, because a gate you cannot run locally is one you only meet when it fails:
+
+```
+dotnet workload install wasm-tools
+dotnet publish tests/Khalkos3D.WasmProbe -c Release       # the asset layer links for the browser
+dotnet publish tests/Khalkos3D.WasmProbe -c Release \
+    -p:RunAOTCompilation=true -p:WasmEnableLLVM=true      # and survives Mono's LLVM AOT
+
+dotnet workload install android
+dotnet publish samples/Khalkos3D.AndroidDemo -c Release -r android-arm64 -o out
+```
+
+**Both wasm modes are checked, because they fail differently.** The plain publish is interpreted; the
+second compiles every method through LLVM, which is what a browser app turns on when it wants speed
+and which rejects things the interpreter is happy to run.

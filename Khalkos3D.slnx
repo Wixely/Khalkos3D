@@ -4,10 +4,11 @@
     <Project Path="src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
     <Project Path="src/Khalkos3D.Gl/Khalkos3D.Gl.csproj" />
   </Folder>
-  <!-- samples/Khalkos3D.AndroidDemo is deliberately ABSENT. Everything in this solution is built
-       by the test job on three operating systems, and an android project makes that build demand
-       the android workload on all of them or fail with NETSDK1147 before compiling a line. The
-       Android app is built by its own CI job instead, which installs what it needs. -->
+  <!-- samples/Khalkos3D.AndroidDemo and tests/Khalkos3D.WasmProbe are deliberately ABSENT.
+       Everything in this solution is built by the test job on three operating systems, and a project
+       needing a workload makes that build demand it on all of them — or fail with NETSDK1147 before
+       compiling a line. Each is built by its own CI job instead, which installs what it needs, and
+       each has a task in .vscode/tasks.json for running the same thing while working. -->
   <Folder Name="/samples/">
     <Project Path="samples/Khalkos3D.Demo/Khalkos3D.Demo.csproj" />
     <Project Path="samples/Khalkos3D.DesktopDemo/Khalkos3D.DesktopDemo.csproj" />
