@@ -16,6 +16,7 @@ setModuleImports('main.js', {
             out.append(dt, dd);
         },
         clear: () => { document.getElementById('out').replaceChildren(); },
+        note: html => { document.getElementById('why').innerHTML = html; },
     },
 });
 

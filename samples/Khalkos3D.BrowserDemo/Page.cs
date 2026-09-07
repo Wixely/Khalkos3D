@@ -23,6 +23,11 @@ public static partial class Page
     [JSImport("page.clear", "main.js")]
     private static partial void Clear();
 
+    /// <summary>The paragraph under the list, which exists to answer the first question anyone asks
+    /// of this page.</summary>
+    [JSImport("page.note", "main.js")]
+    private static partial void Note(string html);
+
     /// <summary>
     /// Called by main.js once the runtime is up.
     ///
@@ -60,6 +65,7 @@ public static partial class Page
 
             foreach (var note in scene.Report.Notes) Row("note", note.ToString() ?? "", false);
 
+            Row("renderer", "not on this runtime — the asset layer only", false);
             Row("status", "read in this tab, by the same code the desktop demo runs", false);
         }
         catch (Exception e)
@@ -68,5 +74,18 @@ public static partial class Page
             // the whole point of this one is to find out whether the asset layer works here.
             Row("status", $"{e.GetType().Name}: {e.Message}", true);
         }
+
+        // THE """UESTION THIS PAGE OTHERWISE INVITES: where is the 3D. Answered here rather than left
+        // to whoever opens it, because "a 3D engine's browser page draws nothing" looks like a defect
+        // and is in fact a documented boundary.
+        Note("""
+            <b>No picture here, and that is the honest state of the browser target.</b>
+            Khalkos3D resolves every GL entry point through a proc-address function its host hands in,
+            and Mono WebAssembly — which is what this page runs on — cannot reach emscripten's WebGL
+            entry points to supply one. So the asset layer runs and the renderer waits.
+            Nothing in the engine needs to change when that gap closes: a host that can resolve the
+            names passes them in, exactly as the desktop and Android hosts do.
+            See docs/PLAN.md, decision 1.
+            """);
     }
 }

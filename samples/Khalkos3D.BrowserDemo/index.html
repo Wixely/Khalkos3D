@@ -19,6 +19,8 @@
     .row dt { color: #6f7681; }
     .row dd { margin: 0; }
     .bad { color: #d2624a; }
+    p.note { margin: 1.5rem 0 0; padding-top: 1.1rem; border-top: 1px solid #23262c; color: #6f7681; }
+    p.note b { color: #8b929d; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -26,6 +28,7 @@
     <h1>Khalkos3D</h1>
     <p class="sub">The asset layer, compiled to WebAssembly and reading a real file in this tab.</p>
     <dl class="row" id="out"><dt>status</dt><dd>starting the runtime&hellip;</dd></dl>
+    <p class="note" id="why"></p>
   </main>
   <script type="module" src="./main.js"></script>
 </body>
