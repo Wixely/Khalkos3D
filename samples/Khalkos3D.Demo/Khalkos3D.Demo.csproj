@@ -22,6 +22,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The logo the built-in scene turns, compiled into the assembly.
+
+         LINKED FROM .github/assets RATHER THAN COPIED, so the model the demo draws and the image
+         the README shows are the same artwork and cannot drift apart. Embedded rather than copied
+         beside the executable because "beside the executable" is a desktop idea: the same code runs
+         out of an APK on Android and out of a download in a browser, and neither has a directory to
+         look in. 144 KB, and the only content this sample ships. -->
+    <EmbeddedResource Include="../../.github/assets/Khalkos3D.stl" LogicalName="Khalkos3D.Demo.Khalkos3D.stl" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/Khalkos3D.Core/Khalkos3D.Core.csproj" />
     <ProjectReference Include="../../src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
     <ProjectReference Include="../../src/Khalkos3D.Gl/Khalkos3D.Gl.csproj" />

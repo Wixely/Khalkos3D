@@ -15,7 +15,9 @@ if (modelPath is not null && !File.Exists(modelPath))
     return 1;
 }
 
-Scene model;
+// Still when it came from a file, turning when it is the built-in scene. The host does not branch
+// on which: DemoViewer takes one type and drives the clock itself.
+AnimatedScene model;
 try
 {
     model = modelPath is null ? DemoScene.Showcase() : DemoScene.Load(modelPath);

@@ -9,109 +9,220 @@ namespace Khalkos3D.Demo;
 /// </summary>
 public static class DemoScene
 {
+    /// <summary>Resource name of the logo, set by <c>LogicalName</c> in the project file.</summary>
+    private const string LogoResource = "Khalkos3D.Demo.Khalkos3D.stl";
+
+    /// <summary>How tall the logo is made, in the units everything else here is expressed in.</summary>
+    private const float LogoHeight = 3f;
+
+    /// <summary>Radians per second. Slow on purpose: fast enough to read as motion within a second
+    /// of launch, slow enough that a still photograph of it is not blurred.</summary>
+    private const float LogoTurn = 0.35f;
+
     /// <summary>
-    /// Two rows of spheres sweeping roughness, metal above and dielectric below, and a box.
+    /// Where in its turn the logo starts, so the lettering faces the camera the demo opens with
+    /// rather than arriving edge-on and turning into view some seconds later.
     ///
-    /// <para><b>Chosen because it fails visibly.</b> A single cube looks correct under almost any
-    /// broken shader. A roughness sweep does not: if the lighting maths is wrong the row stops
-    /// varying, if the environment is missing the metals go black, and if normals are inverted the
-    /// spheres light from the wrong side. One screen tells you whether the renderer works.</para>
+    /// <para>The face of the model points along +Z and <see cref="OrbitController.Frame"/> places
+    /// the camera 0.6 radians off +X, hence the quarter turn less that. It decides nothing but which
+    /// moment of the turn you arrive at, so a change to the default framing costs at worst a
+    /// slightly oblique first frame.</para>
     /// </summary>
-    public static Scene Showcase()
+    private const float LogoFacing = MathF.PI / 2f - 0.6f;
+
+    /// <summary>
+    /// The Khalkos3D logo, turning, with metal spheres and dielectric cubes in orbit around it.
+    ///
+    /// <para><b>Chosen because it fails visibly.</b> A single static object looks correct under
+    /// almost any broken shader. This does not: the orbiting bodies sweep roughness from near-mirror
+    /// to nearly matte, so if the lighting maths is wrong the sweep stops varying, if the
+    /// environment is missing the metals go black — a metal has no diffuse colour to fall back
+    /// on — and if normals are inverted everything lights from the wrong side. The motion adds a
+    /// second check the old still scene could not make: a scene graph that is rebuilt every frame
+    /// but re-uploads nothing, which is visible as a demo that turns smoothly rather than one that
+    /// stutters while the geometry goes back up the bus.</para>
+    ///
+    /// <para>The logo itself is a real STL — the same file the README's image was made from —
+    /// loaded through <see cref="StlReader"/> like any other model rather than built in code. A
+    /// sample for an asset layer should open an asset.</para>
+    /// </summary>
+    public static AnimatedScene Showcase()
     {
-        const int count = 5;
-        const float radius = 1f;
-        const float gap = 2.6f;
+        var logo = LoadLogo();
+        var mesh = logo.Meshes[0];
 
-        var meshes = new List<Mesh> { Solids.Sphere(radius, name: "sphere"), Solids.Box(new Vector3(1.8f), name: "box") };
-        var materials = new List<Material>();
-        var roots = new List<Node>();
+        // Centred on the origin, scaled to LogoHeight, then lifted to stand ON the grid rather than
+        // through it. The file is modelled in millimetres somewhere out in the first quadrant, which
+        // is normal for an exported glyph and no use to a scene that wants to spin it about itself.
+        var bounds = mesh.Bounds;
+        var place = Matrix4x4.CreateTranslation(-bounds.Center)
+            * Matrix4x4.CreateScale(LogoHeight / bounds.Size.Y);
+        var lift = Matrix4x4.CreateTranslation(0f, LogoHeight / 2f, 0f);
 
-        for (var row = 0; row < 2; row++)
+        var meshes = new List<Mesh>
         {
-            var metallic = row == 0 ? 1f : 0f;
-            for (var i = 0; i < count; i++)
+            mesh,
+            Solids.Sphere(0.42f, name: "sphere"),
+            Solids.Box(new Vector3(0.62f), name: "cube"),
+        };
+
+        // Copper, because that is what khalkós means — but the colour is taken from the artwork
+        // rather than from a physics table, and that is a deliberate departure worth explaining.
+        // Real copper's reflectance is a pale (0.955, 0.638, 0.538); on a FLAT face, which reflects
+        // one patch of a grey environment and no more, that renders as dusty pink and reads as
+        // plastic. A sphere would show the whole environment across its surface and look right. So
+        // the logo gets the brand's colour and the orbiting bodies below get the physical treatment.
+        var materials = new List<Material>
+        {
+            new() { Name = "copper", BaseColor = new(0.78f, 0.36f, 0.18f, 1f), Metallic = 1f, Roughness = 0.28f },
+        };
+
+        var orbiters = new List<Orbiter>();
+
+        // The inner ring: gold, metallic, sweeping roughness. Every one of these is the same mesh
+        // and a different material, which is the arrangement a real scene has.
+        const int spheres = 5;
+        for (var i = 0; i < spheres; i++)
+        {
+            // Never quite 0: a perfect mirror has nothing to reflect but the environment, and reads
+            // as a bug rather than as a polished surface.
+            var roughness = 0.06f + i * (0.84f / (spheres - 1));
+            materials.Add(new Material
             {
-                // Never quite 0: a perfect mirror has nothing to reflect but the environment, and
-                // reads as a bug rather than as a polished surface.
-                var roughness = 0.06f + i * (0.84f / (count - 1));
+                Name = $"metal-{roughness:0.00}",
+                BaseColor = new Vector4(0.94f, 0.78f, 0.36f, 1f),
+                Metallic = 1f,
+                Roughness = roughness,
+            });
 
-                materials.Add(new Material
-                {
-                    Name = $"{(metallic > 0f ? "metal" : "plastic")}-{roughness:0.00}",
-                    BaseColor = metallic > 0f
-                        ? new Vector4(0.94f, 0.78f, 0.36f, 1f)
-                        : new Vector4(0.20f, 0.45f, 0.85f, 1f),
-                    Metallic = metallic,
-                    Roughness = roughness,
-                });
-
-                roots.Add(new Node
-                {
-                    Name = materials[^1].Name,
-                    Mesh = 0,
-                    Material = materials.Count - 1,
-                    Transform = Matrix4x4.CreateTranslation(
-                        (i - (count - 1) / 2f) * gap, radius, row == 0 ? -gap * 0.75f : gap * 0.75f),
-                });
-            }
+            orbiters.Add(new Orbiter(
+                Mesh: 1,
+                Material: materials.Count - 1,
+                Radius: 2.6f,
+                Height: 0.95f,
+                Phase: MathF.Tau * i / spheres,
+                Orbit: 0.30f,
+                Spin: 0.9f,
+                Bob: 0.22f));
         }
 
-        materials.Add(new Material { Name = "box", BaseColor = new(0.82f, 0.30f, 0.24f, 1f), Roughness = 0.35f });
-        roots.Add(new Node
+        // The outer ring: plastic, counter-turning, higher up, and cubes — a sphere spinning on its
+        // own axis is invisible however correct it is, so the visible half of "rotating" is carried
+        // by something with corners.
+        const int cubes = 4;
+        for (var i = 0; i < cubes; i++)
         {
-            Name = "box",
-            Mesh = 1,
-            Material = materials.Count - 1,
-            // Turned off-axis so its edges are visible as edges rather than as a flat silhouette.
-            Transform = Matrix4x4.CreateRotationY(0.55f) * Matrix4x4.CreateTranslation(0f, 0.9f, -gap * 2.3f),
-        });
+            var roughness = 0.12f + i * (0.66f / (cubes - 1));
+            materials.Add(new Material
+            {
+                Name = $"plastic-{roughness:0.00}",
+                BaseColor = new Vector4(0.20f, 0.45f, 0.85f, 1f),
+                Roughness = roughness,
+            });
 
-        return new Scene { Meshes = meshes, Materials = materials, Roots = roots, Up = UpAxis.Y };
+            orbiters.Add(new Orbiter(
+                Mesh: 2,
+                Material: materials.Count - 1,
+                Radius: 3.3f,
+                Height: 2.15f,
+                Phase: MathF.Tau * i / cubes,
+                Orbit: -0.19f,
+                Spin: -1.3f,
+                Bob: 0.30f));
+        }
+
+        var parts = new Scene
+        {
+            Meshes = meshes,
+            Materials = materials,
+            // The loader's notes are carried through, so a host that prints them prints the truth
+            // about this file rather than an empty list for a scene that did in fact load one.
+            Report = logo.Report,
+            Up = UpAxis.Y,
+        };
+
+        return AnimatedScene.Moving(parts, seconds =>
+        {
+            var nodes = new List<Node>(orbiters.Count + 1)
+            {
+                new()
+                {
+                    Name = "khalkos3d",
+                    Mesh = 0,
+                    Material = 0,
+                    Transform = place * Matrix4x4.CreateRotationY(LogoFacing + seconds * LogoTurn) * lift,
+                },
+            };
+
+            foreach (var orbiter in orbiters) nodes.Add(orbiter.At(seconds));
+            return nodes;
+        });
     }
 
     /// <summary>
     /// Open a model. Any format the engine reads; the caller decides what to do with the report.
     ///
     /// <para>No image decoder is supplied, so a textured model arrives untextured and says so in its
-    /// <see cref="Scene.Report"/>. That is the honest default for a sample: pulling in a codec to
-    /// make one demo prettier would put a dependency in front of everyone who only wanted to see
-    /// whether the engine runs.</para>
+    /// <see cref="AnimatedScene.Report"/>. That is the honest default for a sample: pulling in a
+    /// codec to make one demo prettier would put a dependency in front of everyone who only wanted
+    /// to see whether the engine runs.</para>
+    ///
+    /// <para>Returned as an <see cref="AnimatedScene"/> that ignores the clock, so a host shows a
+    /// file and shows the built-in scene the same way.</para>
     /// </summary>
-    public static Scene Load(string path) => ModelReader.ReadFile(path);
+    public static AnimatedScene Load(string path) => AnimatedScene.Still(ModelReader.ReadFile(path));
 
     /// <summary>
-    /// Add a ground grid and an origin marker, sized from what is being shown.
+    /// The logo, read from an STL compiled into this assembly.
     ///
-    /// <para>Kept separate from the model so the camera can frame the MODEL. The grid is half again
-    /// as wide as the subject on purpose, and framing the combined bounds would push everything into
-    /// the distance to fit a floor nobody is looking at.</para>
+    /// <para><b>Embedded rather than copied next to the executable</b>, because "next to the
+    /// executable" is a desktop idea. On Android the same code runs out of an APK and on the browser
+    /// out of a download, and neither has a working directory to put a file in. One resource works
+    /// on all three, which is the arrangement the rest of this project keeps arguing for.</para>
     /// </summary>
-    public static Scene WithGround(Scene model)
+    private static Scene LoadLogo()
     {
-        ArgumentNullException.ThrowIfNull(model);
+        using var stream = typeof(DemoScene).Assembly.GetManifestResourceStream(LogoResource)
+            ?? throw new InvalidOperationException(
+                $"{LogoResource} is not embedded in this assembly; see Khalkos3D.Demo.csproj");
 
-        var (grid, axes) = Shapes.For(model.Bounds, model.Up);
+        return StlReader.Read(stream, name: "khalkos3d");
+    }
 
-        var meshes = new List<Mesh>(model.Meshes) { grid, axes };
-        var materials = new List<Material>(model.Materials) { Shapes.LineMaterial };
-        var line = materials.Count - 1;
-
-        var roots = new List<Node>(model.Roots)
+    /// <summary>
+    /// One body in orbit: where it goes round, how fast, and how fast it turns on its own axis.
+    ///
+    /// <para>Held as data and evaluated per frame rather than as accumulated state. Position is a
+    /// function of the time, so the scene cannot drift when frames are late, and pausing is nothing
+    /// more than not advancing the clock.</para>
+    /// </summary>
+    /// <param name="Mesh">Index into the scene's meshes.</param>
+    /// <param name="Material">Index into the scene's materials.</param>
+    /// <param name="Radius">Distance from the axis the logo turns on.</param>
+    /// <param name="Height">Height it circles at, before bobbing.</param>
+    /// <param name="Phase">Where on the ring it starts, in radians.</param>
+    /// <param name="Orbit">Radians per second around the logo; negative goes the other way.</param>
+    /// <param name="Spin">Radians per second about its own axes.</param>
+    /// <param name="Bob">How far it rises and falls, in scene units.</param>
+    private readonly record struct Orbiter(
+        int Mesh, int Material, float Radius, float Height, float Phase, float Orbit, float Spin, float Bob)
+    {
+        internal Node At(float seconds)
         {
-            new() { Name = "grid", Mesh = meshes.Count - 2, Material = line },
-            new() { Name = "axes", Mesh = meshes.Count - 1, Material = line },
-        };
+            var angle = Phase + seconds * Orbit;
+            // The bob is deliberately off the orbital period, so the ring never settles into a
+            // pattern that reads as one rigid object rotating.
+            var height = Height + MathF.Sin(seconds * 0.7f + Phase) * Bob;
 
-        return new Scene
-        {
-            Meshes = meshes,
-            Materials = materials,
-            Images = model.Images,
-            Textures = model.Textures,
-            Roots = roots,
-            Report = model.Report,
-            Up = model.Up,
-        };
+            return new Node
+            {
+                Mesh = Mesh,
+                Material = Material,
+                Transform =
+                    Matrix4x4.CreateFromYawPitchRoll(seconds * Spin, seconds * Spin * 0.6f, 0f)
+                    * Matrix4x4.CreateTranslation(
+                        MathF.Cos(angle) * Radius, height, MathF.Sin(angle) * Radius),
+            };
+        }
     }
 }

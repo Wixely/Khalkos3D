@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Khalkos3D.Gl;
 
@@ -31,7 +32,14 @@ public enum DemoView
 public sealed class DemoViewer : IDisposable
 {
     private readonly OrbitController _orbit = new();
+
+    // The animation's clock, owned here rather than passed in by each host. Both hosts already call
+    // Render on every vertical blank and neither has anything to say about how long that took, so
+    // asking them for a delta would add a line of platform code to buy nothing.
+    private readonly Stopwatch _clock = new();
+
     private GlRenderer? _renderer;
+    private AnimatedScene? _model;
     private Scene _scene = new();
     private BoundingBox _focus = BoundingBox.Empty;
     private RenderSettings _settings = RenderSettings.Default with
@@ -71,18 +79,23 @@ public sealed class DemoViewer : IDisposable
     }
 
     /// <summary>
-    /// Show a model. The ground is added here rather than by the caller so that the camera frames
-    /// the MODEL: the grid is deliberately wider than its subject, and framing both would push the
-    /// thing you came to look at into the distance.
+    /// Show a model, still or moving. The ground is added here rather than by the caller so that the
+    /// camera frames the MODEL: the grid is deliberately wider than its subject, and framing both
+    /// would push the thing you came to look at into the distance.
+    ///
+    /// <para>The clock starts here, so the built-in scene begins its first turn when it appears
+    /// rather than at some point during startup.</para>
     /// </summary>
-    public void Show(Scene model)
+    public void Show(AnimatedScene model)
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        _focus = model.Bounds;
-        _scene = DemoScene.WithGround(model);
+        _model = model.WithGround();
+        _focus = model.Focus;
+        _scene = _model.At(0f);
         _settings = _settings with { Up = model.Up };
         _orbit.Frame(_focus, model.Up, Aspect);
+        _clock.Restart();
     }
 
     /// <summary>The viewport changed size. Safe to call every frame.</summary>
@@ -98,8 +111,14 @@ public sealed class DemoViewer : IDisposable
     /// makes the same gesture turn the model the same amount on a phone and on a large monitor — and
     /// this is the one division that converts.
     /// </summary>
+    /// <remarks>
+    /// The horizontal delta is negated, so dragging left turns the model to the right. That is a
+    /// preference about this viewer rather than a fact about the engine, which is why it is applied
+    /// here and not in <see cref="OrbitController"/>: both hosts inherit it from the shared half,
+    /// and a consumer who wants the other convention still gets it from the untouched controller.
+    /// </remarks>
     public void Drag(float dxPixels, float dyPixels) =>
-        _orbit.Orbit(dxPixels / _width, dyPixels / _height);
+        _orbit.Orbit(-dxPixels / _width, dyPixels / _height);
 
     /// <summary>Slide the view, from a drag in pixels.</summary>
     public void Pan(float dxPixels, float dyPixels) =>
@@ -132,10 +151,20 @@ public sealed class DemoViewer : IDisposable
         return $"{view}: {(on ? "on" : "off")}";
     }
 
-    /// <summary>Draw one frame. Does nothing before <see cref="Initialise"/> succeeds.</summary>
+    /// <summary>
+    /// Draw one frame, rearranging the scene first if it moves. Does nothing before
+    /// <see cref="Initialise"/> succeeds.
+    ///
+    /// <para>The rearrangement allocates a scene graph per frame and re-uploads no geometry: the
+    /// renderer caches its buffers against each <see cref="Mesh"/> by reference, and the meshes are
+    /// the same objects every time. A still model skips even that.</para>
+    /// </summary>
     public void Render()
     {
         if (_renderer is null) return;
+
+        if (_model is { Moves: true } model) _scene = model.At((float)_clock.Elapsed.TotalSeconds);
+
         _renderer.Draw(_scene, _orbit.Camera, _width, _height, _settings);
         Frames++;
     }

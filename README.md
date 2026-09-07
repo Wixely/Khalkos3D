@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/Khalkos3D.png" alt="Khalkos3D" width="220">
+</p>
+
 # Khalkos3D
 
 A small, managed-first 3D engine for .NET. Load models, render them anywhere.
@@ -146,14 +150,24 @@ Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. **W** wireframe, 
 **B** highlight back-faces, **R** reset the view. On Android the same gestures apply: one finger
 orbits, two pinch and pan.
 
-The default scene is two rows of spheres sweeping roughness — metal above, dielectric below — and a
-box, on a grid. It is chosen because it **fails visibly**: a single cube looks right under almost any
-broken shader, whereas if the lighting maths is wrong the row stops varying, if the environment is
-missing the metals go black, and if normals are inverted everything lights from the wrong side. One
-screen tells you whether the renderer works on your machine.
+The default scene is the logo above, turning, with metal spheres and dielectric cubes orbiting and
+spinning around it on two counter-rotating rings. It is chosen because it **fails visibly**: a single
+static object looks right under almost any broken shader, whereas the orbiting bodies sweep roughness
+from near-mirror to nearly matte, so if the lighting maths is wrong the sweep stops varying, if the
+environment is missing the metals go black, and if normals are inverted everything lights from the
+wrong side. One screen tells you whether the renderer works on your machine.
 
-Both solids are generated in code and come out as closed manifolds — `MeshAnalysis` will confirm it.
-A sample for an engine that ships a watertightness check should not hand it geometry that fails.
+The logo is the real `.github/assets/Khalkos3D.stl`, embedded in the shared sample and read through
+`StlReader` on every launch rather than built in code — a sample for an asset layer should open an
+asset. The spheres and cubes are generated and come out as closed manifolds, which `MeshAnalysis`
+will confirm: a sample for an engine that ships a watertightness check should not hand it geometry
+that fails.
+
+**The animation is in the shared half too.** A moving scene here is a node tree rebuilt per frame
+from the time, and the meshes handed over are the same objects each time — so the renderer's buffers
+are cached by reference and nothing is re-uploaded. That is why an engine with no animation system,
+no scene-graph mutation and no update loop can still show something moving, and why the hosts gained
+not one line for it: `DemoViewer` keeps the clock.
 
 ### Where the code lives, which is the point
 
