@@ -82,7 +82,7 @@
       "command": "dotnet",
       "args": [
         "publish",
-        "${workspaceFolder}/samples/Khalkos3D.BrowserDemo/Khalkos3D.BrowserDemo.csproj",
+        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
         "-c",
         "Release"
       ],
@@ -96,30 +96,12 @@
       "command": "dotnet",
       "args": [
         "publish",
-        "${workspaceFolder}/samples/Khalkos3D.BrowserDemo/Khalkos3D.BrowserDemo.csproj",
+        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
         "-c",
         "Release",
         "-p:RunAOTCompilation=true",
         "-p:WasmEnableLLVM=true"
       ],
-      "problemMatcher": "$msCompile",
-      "presentation": { "reveal": "always", "panel": "dedicated" }
-    },
-    {
-      "label": "wasm: run it in a browser (Mono)",
-      "detail": "Publishes the demo, serves the bundle and opens a tab. The same thing the Browser entries in the debug list do.",
-      "type": "process",
-      "command": "dotnet",
-      "args": ["run", "--project", "${workspaceFolder}/samples/Khalkos3D.BrowserServe", "--", "--publish"],
-      "problemMatcher": "$msCompile",
-      "presentation": { "reveal": "always", "panel": "dedicated" }
-    },
-    {
-      "label": "wasm: run it in a browser (Mono + LLVM)",
-      "detail": "The same, AOT-compiled through LLVM first. Minutes before the tab opens.",
-      "type": "process",
-      "command": "dotnet",
-      "args": ["run", "--project", "${workspaceFolder}/samples/Khalkos3D.BrowserServe", "--", "--publish", "--llvm"],
       "problemMatcher": "$msCompile",
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },

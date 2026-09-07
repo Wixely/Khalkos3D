@@ -50,27 +50,30 @@
       "stopAtEntry": false
     },
     {
-      // NOT A DEBUG SESSION, and it cannot be: what runs is a browser, and the C# in it is compiled
-      // to WebAssembly. It is here because this dropdown is where people look for "run the thing".
-      // node-terminal is VS Code's own way to run a command in a debug terminal — it comes with the
-      // editor, needs nothing installed, and does not care that the command is not JavaScript.
+      // NOT A DEBUG SESSION, and there is nothing to watch run: this publishes the asset layer for
+      // WebAssembly and the result is whether it linked. It is in this dropdown because that is
+      // where people look for "run the thing", and the terminal shows the outcome.
       //
-      // The command publishes the demo, serves the bundle and opens a tab. One command rather than
-      // two chained with &&, which Windows PowerShell 5.1 does not have.
-      "name": "Browser: the asset layer in a tab (Mono)",
+      // There is deliberately no browser to open. Khalkos3D reaches GL through a proc-address
+      // function its host supplies, and Mono WebAssembly cannot resolve emscripten's WebGL entry
+      // points to provide one — so a page would render nothing. See docs/PLAN.md, decision 1.
+      //
+      // node-terminal is VS Code's own way to run a command in a debug terminal: it ships with the
+      // editor and does not mind that the command is not JavaScript.
+      "name": "Check: the asset layer links for wasm (Mono)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "dotnet run --project samples/Khalkos3D.BrowserServe -- --publish",
+      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release",
       "cwd": "${workspaceFolder}"
     },
     {
-      // The same page, AOT-compiled ahead of time through LLVM rather than interpreted. Minutes
-      // before the tab opens, because that compile is the slow part — and it is the mode that
-      // rejects things the interpreter is happy to run, which is why it is worth watching run.
-      "name": "Browser: the asset layer in a tab (Mono + LLVM)",
+      // The same check with Mono's AOT compiler and LLVM switched on. Minutes rather than seconds,
+      // and it refuses things the interpreter is happy to run — which is why both modes are checked
+      // rather than just the one a browser app usually ships.
+      "name": "Check: the asset layer links for wasm (Mono + LLVM)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "dotnet run --project samples/Khalkos3D.BrowserServe -- --publish --llvm",
+      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release -p:RunAOTCompilation=true -p:WasmEnableLLVM=true",
       "cwd": "${workspaceFolder}"
     }
   ],

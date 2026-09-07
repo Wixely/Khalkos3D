@@ -4,7 +4,7 @@
     <Project Path="src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
     <Project Path="src/Khalkos3D.Gl/Khalkos3D.Gl.csproj" />
   </Folder>
-  <!-- samples/Khalkos3D.AndroidDemo and samples/Khalkos3D.BrowserDemo are deliberately ABSENT.
+  <!-- samples/Khalkos3D.AndroidDemo and tests/Khalkos3D.WasmProbe are deliberately ABSENT.
        Everything in this solution is built by the test job on three operating systems, and a project
        needing a workload makes that build demand it on all of them — or fail with NETSDK1147 before
        compiling a line. Each is built by its own CI job instead, which installs what it needs, and
@@ -12,9 +12,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/Khalkos3D.Demo/Khalkos3D.Demo.csproj" />
     <Project Path="samples/Khalkos3D.DesktopDemo/Khalkos3D.DesktopDemo.csproj" />
-    <!-- The little server that opens the browser demo in a tab IS here: it needs no workload, and
-         building it on all three operating systems is exactly what it is for. -->
-    <Project Path="samples/Khalkos3D.BrowserServe/Khalkos3D.BrowserServe.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Khalkos3D.Tests/Khalkos3D.Tests.csproj" />

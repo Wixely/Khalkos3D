@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Proof that the asset layer reaches a browser.
+
+       THE README CLAIMS THESE RUN IN A BROWSER, and a claim about a target nobody builds for is one
+       that stops being true quietly: a single BCL call with no wasm implementation is all it takes,
+       and it would be found by a user rather than by us.
+
+       Targeting net10.0-browser is the half that matters. It turns on the platform-compatibility
+       analyser, so an API that browser does not support becomes CA1416 — an error here, since
+       warnings are errors — instead of a runtime failure in someone's tab.
+
+       DELIBERATELY OUTSIDE Khalkos3D.slnx, like the Android app and for the same reason: everything
+       in the solution is built by CI on three operating systems, and a project needing the wasm
+       workload would make that build demand it on all three or fail before compiling a line. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+
+    <!-- Mono's LLVM AOT is off by default and switched on from the command line, which is what the
+         "wasm: link for the browser (Mono + LLVM)" task does. Both modes have to keep working: the
+         plain one is what a browser app normally ships, and the LLVM one is where a BCL call that
+         the interpreter tolerates can still fail to compile. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Khalkos3D.Formats/Khalkos3D.Formats.csproj" />
+  </ItemGroup>
+
+</Project>
