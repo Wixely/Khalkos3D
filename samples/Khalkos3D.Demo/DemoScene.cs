@@ -15,33 +15,34 @@ public static class DemoScene
     /// <summary>How tall the logo is made, in the units everything else here is expressed in.</summary>
     private const float LogoHeight = 3f;
 
-    /// <summary>Radians per second. Slow on purpose: fast enough to read as motion within a second
-    /// of launch, slow enough that a still photograph of it is not blurred.</summary>
-    private const float LogoTurn = 0.35f;
-
     /// <summary>
-    /// Where in its turn the logo starts, so the lettering faces the camera the demo opens with
-    /// rather than arriving edge-on and turning into view some seconds later.
+    /// Which way the logo faces: square to the camera the demo opens with.
     ///
     /// <para>The face of the model points along +Z and <see cref="OrbitController.Frame"/> places
-    /// the camera 0.6 radians off +X, hence the quarter turn less that. It decides nothing but which
-    /// moment of the turn you arrive at, so a change to the default framing costs at worst a
-    /// slightly oblique first frame.</para>
+    /// the camera 0.6 radians off +X, hence the quarter turn less that. Drag the view and the logo
+    /// stays where it is, which is the point of it being a logo: it is the lights that move.</para>
     /// </summary>
     private const float LogoFacing = MathF.PI / 2f - 0.6f;
+
+    /// <summary>How much bigger than the sphere mesh a cube's halo is drawn. The cube is 0.62 across,
+    /// so this puts the haze well outside it — a glow that stopped at the geometry would not be
+    /// one.</summary>
+    private const float HaloScale = 2.2f;
 
     /// <summary>
     /// Brushed copper, for the logo: parallel streaks of grain, each catching the light at a
     /// slightly different angle.
     ///
     /// <para><b>Keyed to OBJECT space, which is the whole reason <c>Surface.object</c> exists.</b>
-    /// The logo turns, and a pattern keyed to where it happens to be would swim across the metal as
-    /// it went round — grain belongs to the thing, not to the room.</para>
+    /// The logo stands still, but the lights that cross it do not, and the cubes carrying this
+    /// idea — see the crust in <see cref="Hot"/> — tumble as they orbit. Grain belongs to the thing,
+    /// not to the room: a pattern keyed to where something happens to be swims across it the moment
+    /// either the object or the frame of reference moves.</para>
     ///
     /// <para><b>The tilt is what makes it read as brushed rather than as a texture.</b> A flat face
     /// reflects one patch of the environment, so varying the colour alone gives stripes on a flat
     /// sheet; nudging the normal across the brush is what a groove physically does, and it is what
-    /// makes the streaks light up as the logo turns past the lamp.</para>
+    /// makes the streaks light up as a lamp passes the logo.</para>
     /// </summary>
     private static readonly Shader Brushed = Shader.Surface("""
         uniform float uLanes;    // streaks per unit of the model's own height
@@ -97,9 +98,6 @@ public static class DemoScene
             // into. On a face this flat it is also the only thing that reads as metal at all: the
             // environment barely changes across a plane, so without it the grain is a pattern on a
             // dull sheet.
-            vec3 L = normalize(-uLightDir);
-            vec3 H = normalize(L + s.view);
-
             // The grooves FAN, and that detail is the whole effect. Tilting the normal alone leaves
             // the brush direction untouched — cross(up, n + up*k) is cross(up, n) — so the sheen
             // comes out identical across a flat face and reads as a brightness lift rather than as
@@ -109,22 +107,48 @@ public static class DemoScene
             vec3 across = cross(s.normal, tangent);
             vec3 brush = normalize(tangent + across * (streak - 0.5) * 0.30);
 
-            float axis = dot(brush, H);
-            float sheen = pow(max(0.0, 1.0 - axis * axis), 90.0);
-
             // Desaturated a little towards the light: a metal's highlight carries its own tint, but
-            // the brightest part of a real one is close to white and that is what stops this reading
+            // the brightest part of a real one is close to white, and that is what stops this reading
             // as a brown surface with orange stripes on it.
-            // Two lobes: a narrow one for the glints that pick out individual grooves, and a broad
-            // one that lifts the whole face the way a metal reads brighter than its surroundings.
-            // With only the narrow lobe the metal is dark between glints and looks like grained wood.
-            float broad = pow(max(0.0, 1.0 - axis * axis), 12.0);
             vec3 gleam = mix(uCopper, vec3(1.0), 0.06);
+
+            // EVERY LIGHT, and this loop is why the metal shows the cubes going past. The engine sums
+            // its own lights for the isotropic part; an anisotropic band cannot be expressed through
+            // one roughness, so the geometry per light is worked out again here. The attenuation is
+            // the engine's, repeated deliberately: a gleam that ignored distance would be as bright
+            // from a lamp across the scene as from one beside it.
+            vec3 sheen = vec3(0.0);
+            for (int i = 0; i < uLightCount; i++) {
+                vec3 L;
+                float attenuation = 1.0;
+
+                if (uLightRange[i] <= 0.0) {
+                    L = normalize(-uLightVector[i]);
+                } else {
+                    vec3 offset = uLightVector[i] - s.world;
+                    float distance = max(length(offset), 0.0001);
+                    L = offset / distance;
+                    float ratio = clamp(distance / uLightRange[i], 0.0, 1.0);
+                    float window = 1.0 - ratio * ratio * ratio * ratio;
+                    attenuation = window * window / (distance * distance);
+                }
+
+                if (dot(s.normal, L) <= 0.0) continue;
+
+                float axis = dot(brush, normalize(L + s.view));
+                float band = max(0.0, 1.0 - axis * axis);
+
+                // Two lobes: a narrow one for the glints that pick out individual grooves, and a
+                // broad one that lifts the whole face the way a metal reads brighter than its
+                // surroundings. With only the narrow lobe the metal is dark between the glints and
+                // looks like grained wood.
+                sheen += uLightColor[i] * attenuation * (pow(band, 90.0) * 0.42 + pow(band, 12.0) * 0.10);
+            }
 
             // Kept under the tone mapper's shoulder on purpose. Reinhard compresses a channel that
             // is already near 1 far harder than the others, so pushing the sheen for brightness
             // desaturates the copper into salmon — the metal gets paler the more it gleams.
-            s.emissive += gleam * uLightColor * (sheen * 0.42 + broad * 0.10) * (0.25 + 0.75 * streak);
+            s.emissive += gleam * sheen * (0.25 + 0.75 * streak);
         }
         """, name: "brushed copper");
 
@@ -171,12 +195,12 @@ public static class DemoScene
             s.baseColor.rgb = mix(s.baseColor.rgb, hot * 0.30, glow);
             s.metallic = mix(s.metallic, 0.15, glow);
             s.roughness = mix(s.roughness, 0.45, glow);
-            s.emissive = hot * glow * 1.7;
+            s.emissive = hot * glow * 2.2;
         }
         """, name: "hot iron");
 
     /// <summary>
-    /// The Khalkos3D logo, turning, with metal spheres and dielectric cubes in orbit around it.
+    /// The Khalkos3D logo, still, with metal spheres and glowing hot cubes in orbit around it.
     ///
     /// <para><b>Chosen because it fails visibly.</b> A single static object looks correct under
     /// almost any broken shader. This does not: the orbiting bodies sweep roughness from near-mirror
@@ -184,7 +208,7 @@ public static class DemoScene
     /// environment is missing the metals go black — a metal has no diffuse colour to fall back
     /// on — and if normals are inverted everything lights from the wrong side. The motion adds a
     /// second check the old still scene could not make: a scene graph that is rebuilt every frame
-    /// but re-uploads nothing, which is visible as a demo that turns smoothly rather than one that
+    /// but re-uploads nothing, which is visible as a demo that moves smoothly rather than one that
     /// stutters while the geometry goes back up the bus.</para>
     ///
     /// <para>The logo itself is a real STL — the same file the README's image was made from —
@@ -268,9 +292,9 @@ public static class DemoScene
                 Bob: 0.22f));
         }
 
-        // The outer ring: plastic, counter-turning, higher up, and cubes — a sphere spinning on its
-        // own axis is invisible however correct it is, so the visible half of "rotating" is carried
-        // by something with corners. These are the ones carrying the sample's own shader.
+        // The outer ring: hot iron, counter-turning, higher up, riding a wave, and cubes — a sphere
+        // spinning on its own axis is invisible however correct it is, so the visible half of
+        // "rotating" is carried by something with corners. These are the lamps.
         const int cubes = 4;
         var firstCube = materials.Count;
         for (var i = 0; i < cubes; i++)
@@ -278,12 +302,12 @@ public static class DemoScene
             orbiters.Add(new Orbiter(
                 Mesh: 2,
                 Material: firstCube + i,
-                Radius: 3.3f,
-                Height: 2.15f,
+                Radius: 2.9f,
+                Height: 2.05f,
                 Phase: MathF.Tau * i / cubes,
                 Orbit: -0.19f,
                 Spin: -1.3f,
-                Bob: 0.30f));
+                Bob: 1.15f));
         }
 
         // The cubes' materials are rebuilt every frame, because their heat changes. Everything ahead
@@ -311,6 +335,30 @@ public static class DemoScene
                     },
                 });
             }
+
+            // The haloes, appended after the cubes so every index handed out above still means what
+            // it meant. Transparent, so the renderer draws them after the opaque pass and sorts them
+            // back to front — which is exactly what a glow over a dark scene needs.
+            for (var i = 0; i < cubes; i++)
+            {
+                all.Add(new Material
+                {
+                    Name = $"halo-{i}",
+                    BaseColor = new Vector4(1f, 0.5f, 0.15f, 0.5f),
+                    Alpha = AlphaMode.Blend,
+                    Unlit = true,
+                    // One face only: a shell drawn on both sides doubles its own edge and reads as a
+                    // bubble rather than as a haze.
+                    DoubleSided = false,
+                    Shader = Halo,
+                    ShaderValues = new Dictionary<string, ShaderValue>
+                    {
+                        ["uHeat"] = Heat(seconds, i),
+                        ["uEmber"] = Ember,
+                    },
+                });
+            }
+
             return all;
         }
 
@@ -336,10 +384,14 @@ public static class DemoScene
             {
                 var heat = Heat(seconds, i);
                 var where = orbiters[spheres + i].At(seconds).Transform.Translation;
-                // Cubed, so the light falls away faster than the glow does. A lamp that dims linearly
-                // with a visible ember reads as a light with a painted object near it; light from
-                // something actually hot goes almost out while the metal is still visibly red.
-                lights.Add(Light.Point(where, Ember * (20f * heat * heat * heat), range: 6.5f));
+                // Squared, so the light falls away faster than the glow does — a cooling cube dims
+                // as a light before it stops looking red — but not so fast that the two cubes at the
+                // bottom of their cycle stop lighting anything at all. All four should be readable on
+                // the logo at once; that is the whole point of there being four of them.
+                // Bright, and reaching about twice the ring's radius. A lamp this close to a flat
+                // face is what makes a POOL on it rather than a tint: the falloff across the logo is
+                // steep enough to see where the light is standing.
+                lights.Add(Light.Point(where, Ember * (62f * heat * heat), range: 6.0f));
             }
 
             return lights;
@@ -364,14 +416,70 @@ public static class DemoScene
                     Name = "khalkos3d",
                     Mesh = 0,
                     Material = 0,
-                    Transform = place * Matrix4x4.CreateRotationY(LogoFacing + seconds * LogoTurn) * lift,
+                    // STILL. It is a logo, not an exhibit on a turntable: what moves in this scene
+                    // is the light crossing it, and a subject that turns as well gives the eye no
+                    // fixed thing to read that against.
+                    Transform = place * Matrix4x4.CreateRotationY(LogoFacing) * lift,
                 },
             };
 
             foreach (var orbiter in orbiters) nodes.Add(orbiter.At(seconds));
+
+            // A halo around each cube: the same sphere mesh the orbiting spheres use, scaled up and
+            // parked at the cube's position. The same mesh on purpose — it is uploaded once and drawn
+            // nine times, which is what the scene graph is for.
+            for (var i = 0; i < cubes; i++)
+            {
+                var where = orbiters[spheres + i].At(seconds).Transform.Translation;
+                nodes.Add(new Node
+                {
+                    Name = $"halo-{i}",
+                    Mesh = 1,
+                    Material = firstCube + cubes + i,
+                    Transform = Matrix4x4.CreateScale(HaloScale) * Matrix4x4.CreateTranslation(where),
+                });
+            }
+
             return nodes;
         }, Dress, Lights);
     }
+
+    /// <summary>
+    /// The glow AROUND a hot cube, on a sphere drawn over it: light does not stop at the surface of
+    /// the thing emitting it.
+    ///
+    /// <para><b>A shell rather than a post-process.</b> A real bloom means rendering the frame to a
+    /// texture, blurring the bright parts and compositing them back — several passes, a pipeline this
+    /// engine does not have, and a per-platform framebuffer question on six targets. A transparent
+    /// shell around each cube is one more draw with no engine change at all, and on a dark background
+    /// it reads as the same thing.</para>
+    ///
+    /// <para>Brightest at the SILHOUETTE, because that is where a viewer looks through the most of
+    /// the volume — the reason a flame has a bright edge and a soft middle. Unlit, so the engine
+    /// hands the colour straight out without lighting the haze the cube is throwing.</para>
+    /// </summary>
+    private static readonly Shader Halo = Shader.Surface("""
+        uniform float uHeat;
+        uniform vec3  uEmber;
+
+        void surface(inout Surface s) {
+            // DENSEST THROUGH THE MIDDLE, thinning to nothing at the shell's edge. The instinct is a
+            // fresnel rim — bright where you graze the surface — and that is exactly wrong here: it
+            // draws a ring, and a ring reads as a bubble around the cube rather than as light leaving
+            // it. A glow is a volume seen from outside, so it is thickest where you look straight
+            // through its centre.
+            float facing = max(dot(normalize(s.normal), s.view), 0.0);
+            float thickness = pow(facing, 2.4);
+
+            // Fire is not a lamp. The flicker is keyed to the shell's own space so it sits on the
+            // glow rather than swimming through it, and to the heat so it quickens as the iron
+            // brightens.
+            float flicker = 0.84 + 0.16 * sin(s.object.y * 11.0 + uHeat * 23.0)
+                                 * sin(s.object.x * 7.0 - uHeat * 17.0);
+
+            s.baseColor = vec4(uEmber * (0.95 + 0.6 * uHeat), thickness * uHeat * flicker * 0.8);
+        }
+        """, name: "halo");
 
     /// <summary>The colour these cubes glow at the top of their pulse, linear RGB.</summary>
     private static readonly Vector3 Ember = new(1.0f, 0.42f, 0.10f);
@@ -391,7 +499,7 @@ public static class DemoScene
     private static float Heat(float seconds, int cube)
     {
         var pulse = 0.5f + 0.5f * MathF.Sin(seconds * 1.15f + cube * 1.7f);
-        return 0.12f + 0.88f * pulse * pulse;
+        return 0.22f + 0.78f * pulse * pulse;
     }
 
     /// <summary>
@@ -433,7 +541,7 @@ public static class DemoScene
     /// </summary>
     /// <param name="Mesh">Index into the scene's meshes.</param>
     /// <param name="Material">Index into the scene's materials.</param>
-    /// <param name="Radius">Distance from the axis the logo turns on.</param>
+    /// <param name="Radius">Distance from the axis the ring is centred on.</param>
     /// <param name="Height">Height it circles at, before bobbing.</param>
     /// <param name="Phase">Where on the ring it starts, in radians.</param>
     /// <param name="Orbit">Radians per second around the logo; negative goes the other way.</param>
@@ -445,9 +553,11 @@ public static class DemoScene
         internal Node At(float seconds)
         {
             var angle = Phase + seconds * Orbit;
-            // The bob is deliberately off the orbital period, so the ring never settles into a
-            // pattern that reads as one rigid object rotating.
-            var height = Height + MathF.Sin(seconds * 0.7f + Phase) * Bob;
+            // A WAVE AROUND THE RING rather than a bob against the clock: the height is a function of
+            // where the body is, not of what time it is, so the four of them ride up and down through
+            // a standing wave as they go round. Two crests per revolution, which is what makes
+            // neighbours visibly out of step instead of rising together.
+            var height = Height + MathF.Sin(angle * 2f) * Bob;
 
             return new Node
             {

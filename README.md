@@ -230,8 +230,8 @@ Drag to orbit, right-drag or shift-drag to pan, wheel to zoom. **W** wireframe, 
 **B** highlight back-faces, **R** reset the view. On Android the same gestures apply: one finger
 orbits, two pinch and pan.
 
-The default scene is the logo above, turning, with metal spheres and dielectric cubes orbiting and
-spinning around it on two counter-rotating rings. It is chosen because it **fails visibly**: a single
+The default scene is the logo above, standing still, with metal spheres and glowing hot iron cubes
+orbiting it on two counter-rotating rings — the cubes riding a standing wave as they go round. It is chosen because it **fails visibly**: a single
 static object looks right under almost any broken shader, whereas the orbiting bodies sweep roughness
 from near-mirror to nearly matte, so if the lighting maths is wrong the sweep stops varying, if the
 environment is missing the metals go black, and if normals are inverted everything lights from the
@@ -253,8 +253,9 @@ not one line for it: `DemoViewer` keeps the clock.
 rather than admired: the desktop app prints whether they compiled and the Android app logs it, so the
 same lines are known to build on a desktop GL compiler and on a phone's GLES one — which are different
 compilers, and the reason "it runs everywhere" is a claim worth testing rather than asserting. The K
-is brushed copper, its grain in the model's own space so it stays on the metal as it turns; the cubes
-are iron heated until it glows, breathing between dull red and nearly white.
+is brushed copper, its grain in the model's own space so it belongs to the metal rather than to the
+room; the cubes are iron heated until it glows, breathing between dull red and nearly white, each
+wrapped in a halo that reaches well past its own geometry.
 
 **The cubes are also lights.** Each is a point light at its own position, coloured by the same heat
 value its shader is given — one number, so the glow you see and the light it throws can never disagree

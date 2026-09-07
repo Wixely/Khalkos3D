@@ -52,7 +52,7 @@ public sealed class DemoViewer : IDisposable
         // and pulse, and an ambient bright enough to light everything by itself would leave them
         // adding a tint to a picture already finished. Not off: a metal with nothing to reflect
         // renders black, which is the failure the environment exists to prevent.
-        Environment = Khalkos3D.Environment.Studio with { Intensity = 0.7f },
+        Environment = Khalkos3D.Environment.Studio with { Intensity = 0.55f },
     };
 
     private int _width = 1, _height = 1;
