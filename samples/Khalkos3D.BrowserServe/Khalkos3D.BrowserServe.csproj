@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Serves a published wasm bundle and opens a browser at it.
+
+       WHY THIS EXISTS AT ALL: a browser cannot open a wasm app from the filesystem — module scripts
+       and streaming compilation both need a real origin — so something has to serve the folder. And
+       `dotnet run` cannot do it here, because Mono's AOT runs on PUBLISH and a run never AOT-compiles
+       anything: seeing the LLVM build in a tab means publishing first and serving the result.
+
+       Forty lines of HttpListener rather than a package, for the same reason the rest of this
+       repository has no packages. It is also why this can sit in the solution and be built by CI on
+       three operating systems: it depends on nothing. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>khalkos3d-serve</AssemblyName>
+    <RootNamespace>Khalkos3D.BrowserServe</RootNamespace>
+  </PropertyGroup>
+
+</Project>

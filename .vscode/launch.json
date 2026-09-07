@@ -50,27 +50,27 @@
       "stopAtEntry": false
     },
     {
-      // NOT A DEBUG SESSION, and it cannot be: a wasm publish is a build, and what it proves is
-      // whether it succeeded. It is here because this dropdown is where people look for "run the
-      // thing", and a gate nobody can find is a gate nobody runs. The same commands are also under
-      // Tasks: Run Task, which is where a build belongs.
-      //
+      // NOT A DEBUG SESSION, and it cannot be: what runs is a browser, and the C# in it is compiled
+      // to WebAssembly. It is here because this dropdown is where people look for "run the thing".
       // node-terminal is VS Code's own way to run a command in a debug terminal — it comes with the
       // editor, needs nothing installed, and does not care that the command is not JavaScript.
-      "name": "Browser gate: link for wasm (Mono)",
+      //
+      // The command publishes the demo, serves the bundle and opens a tab. One command rather than
+      // two chained with &&, which Windows PowerShell 5.1 does not have.
+      "name": "Browser: the asset layer in a tab (Mono)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release",
+      "command": "dotnet run --project samples/Khalkos3D.BrowserServe -- --publish",
       "cwd": "${workspaceFolder}"
     },
     {
-      // The same probe with Mono's AOT compiler and LLVM switched on. Minutes rather than seconds,
-      // and it refuses things the interpreter is happy to run — which is the whole reason both modes
-      // are checked rather than just the one a browser app usually ships.
-      "name": "Browser gate: link for wasm (Mono + LLVM)",
+      // The same page, AOT-compiled ahead of time through LLVM rather than interpreted. Minutes
+      // before the tab opens, because that compile is the slow part — and it is the mode that
+      // rejects things the interpreter is happy to run, which is why it is worth watching run.
+      "name": "Browser: the asset layer in a tab (Mono + LLVM)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release -p:RunAOTCompilation=true -p:WasmEnableLLVM=true",
+      "command": "dotnet run --project samples/Khalkos3D.BrowserServe -- --publish --llvm",
       "cwd": "${workspaceFolder}"
     }
   ],

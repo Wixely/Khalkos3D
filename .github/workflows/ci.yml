@@ -108,13 +108,14 @@ jobs:
       # one that stops being true quietly — a single BCL call with no wasm implementation is all it
       # takes, and it would be found by a user rather than by us.
       #
-      # The probe is a project in the repository rather than a heredoc here, so that the same thing
-      # can be run from an editor while working: see the "wasm: link for the browser" tasks in
-      # .vscode/tasks.json. A gate you cannot run locally is one you only meet when it fails.
+      # The probe is a project in the repository rather than a heredoc here, and it is the same
+      # project a person can open in a browser — see the "Browser:" entries in .vscode/launch.json.
+      # A gate you cannot run locally is one you only meet when it fails, and a page you can look at
+      # is a better answer to "does it work in a browser" than a build log.
       - name: The loaders compile and link for browser-wasm
         run: |
           set -euo pipefail
-          dotnet publish tests/Khalkos3D.WasmProbe -c Release
+          dotnet publish samples/Khalkos3D.BrowserDemo -c Release
 
           # The link really carried our assemblies into the bundle, rather than merely compiling
           # them — which is the assertion that caught an empty Main, when the bundle came out
@@ -124,7 +125,7 @@ jobs:
           # on whether Webcil is enabled and that varies by SDK. The listing prints unconditionally:
           # the first failure here needed a local reproduction to understand, which is exactly what a
           # gate's log should make unnecessary.
-          bundle=tests/Khalkos3D.WasmProbe/bin/Release/net10.0-browser/browser-wasm/AppBundle
+          bundle=samples/Khalkos3D.BrowserDemo/bin/Release/net10.0-browser/browser-wasm/AppBundle
           echo "--- bundle contents ---"
           find "$bundle" -name 'Khalkos3D.*' -printf '%P\n' | sort
           found=$(find "$bundle" -name 'Khalkos3D.Core.*' -o -name 'Khalkos3D.Formats.*' | wc -l)
@@ -142,7 +143,7 @@ jobs:
       - name: And they survive Mono's LLVM AOT
         run: |
           set -euo pipefail
-          dotnet publish tests/Khalkos3D.WasmProbe -c Release \
+          dotnet publish samples/Khalkos3D.BrowserDemo -c Release \
             -p:RunAOTCompilation=true -p:WasmEnableLLVM=true
           echo "ok: the asset layer AOT-compiles for browser-wasm through LLVM"
 

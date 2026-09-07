@@ -76,13 +76,13 @@
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },
     {
-      "label": "wasm: link for the browser (Mono)",
-      "detail": "What a browser app normally ships: the asset layer trimmed into a wasm bundle, interpreted.",
+      "label": "wasm: check it links (Mono)",
+      "detail": "The CI gate: does the asset layer trim and link into a wasm bundle. Builds only — nothing opens.",
       "type": "process",
       "command": "dotnet",
       "args": [
         "publish",
-        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
+        "${workspaceFolder}/samples/Khalkos3D.BrowserDemo/Khalkos3D.BrowserDemo.csproj",
         "-c",
         "Release"
       ],
@@ -90,18 +90,36 @@
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },
     {
-      "label": "wasm: link for the browser (Mono + LLVM)",
-      "detail": "The same thing AOT-compiled through LLVM. Minutes rather than seconds, and it fails on things the interpreter tolerates.",
+      "label": "wasm: check it links (Mono + LLVM)",
+      "detail": "The same gate with Mono's LLVM AOT. Minutes rather than seconds, and it fails on things the interpreter tolerates.",
       "type": "process",
       "command": "dotnet",
       "args": [
         "publish",
-        "${workspaceFolder}/tests/Khalkos3D.WasmProbe/Khalkos3D.WasmProbe.csproj",
+        "${workspaceFolder}/samples/Khalkos3D.BrowserDemo/Khalkos3D.BrowserDemo.csproj",
         "-c",
         "Release",
         "-p:RunAOTCompilation=true",
         "-p:WasmEnableLLVM=true"
       ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "wasm: run it in a browser (Mono)",
+      "detail": "Publishes the demo, serves the bundle and opens a tab. The same thing the Browser entries in the debug list do.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/samples/Khalkos3D.BrowserServe", "--", "--publish"],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "wasm: run it in a browser (Mono + LLVM)",
+      "detail": "The same, AOT-compiled through LLVM first. Minutes before the tab opens.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/samples/Khalkos3D.BrowserServe", "--", "--publish", "--llvm"],
       "problemMatcher": "$msCompile",
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },
