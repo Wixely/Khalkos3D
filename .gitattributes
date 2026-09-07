@@ -7,6 +7,7 @@
 
 # Binary, so git never guesses at them.
 *.png binary
+*.ico binary
 *.jpg binary
 *.glb binary
 *.stl binary

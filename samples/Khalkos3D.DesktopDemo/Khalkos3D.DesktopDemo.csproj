@@ -17,7 +17,18 @@
     <IsPackable>false</IsPackable>
     <AssemblyName>khalkos3d-demo</AssemblyName>
     <RootNamespace>Khalkos3D.DesktopDemo</RootNamespace>
+
+    <!-- The executable's icon, and the same file the window sets on itself at startup. Linked from
+         .github/assets rather than copied, for the reason the STL is: one artwork, one file, so the
+         icon on the taskbar cannot drift away from the model in the scene. -->
+    <ApplicationIcon>../../.github/assets/Khalkos3D.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Carried inside the assembly as well, because ApplicationIcon puts it in the PE's Win32
+         resources where managed code cannot conveniently read it back. 150 KB. -->
+    <EmbeddedResource Include="../../.github/assets/Khalkos3D.ico" LogicalName="Khalkos3D.DesktopDemo.Khalkos3D.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />

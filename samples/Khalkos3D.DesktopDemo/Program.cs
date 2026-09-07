@@ -1,6 +1,7 @@
 using System.Numerics;
 using Khalkos3D;
 using Khalkos3D.Demo;
+using Khalkos3D.DesktopDemo;
 using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
@@ -51,6 +52,10 @@ var last = Vector2.Zero;
 
 window.Load += () =>
 {
+    // The window wears the same icon as the executable. Set here rather than in the options because
+    // there is no window to put an icon on until it has been created.
+    if (WindowIcon.Sizes() is { Length: > 0 } icons) window.SetWindowIcon(icons);
+
     var context = window.GLContext;
     if (context is null)
     {
