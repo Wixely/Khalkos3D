@@ -494,6 +494,29 @@ public sealed unsafe class GlRenderer : IDisposable
                 reference.Minify == TextureFilter.Nearest
                     ? GlApi.NEAREST_MIPMAP_LINEAR : GlApi.LINEAR_MIPMAP_LINEAR);
             _gl.GenerateMipmap(GlApi.TEXTURE_2D);
+
+            // ANISOTROPY, and a mip chain is not safe to ship without it on a model whose unwrap is
+            // a lathe. The u gradient around the ring is enormous compared with v, so ISOTROPIC mip
+            // selection takes the worst axis and picks a level far blurrier than the surface
+            // deserves — a painted texture collapsing to a flat average colour over most of the
+            // model, which reads as a broken UV map rather than as a filtering choice.
+            //
+            // It is minification-dependent, so it hides wherever the model is drawn large relative
+            // to its texture and appears wherever it is drawn small: correct on a desktop window,
+            // wrong on a phone, which is exactly how it was found. Anisotropy is the option that is
+            // neither blurred nor aliased.
+            //
+            // An extension, so it is asked for and not assumed: query the driver's ceiling and take
+            // the lesser of it and 8. A driver without it reports nothing and the value is left
+            // alone, which is the pre-existing behaviour rather than an error.
+            if (_gl.GetFloatv is not null && _gl.TexParameterf is not null)
+            {
+                float maxAnisotropy = 0;
+                _gl.GetFloatv(GlApi.MAX_MAX_ANISOTROPY, &maxAnisotropy);
+                if (maxAnisotropy > 1f)
+                    _gl.TexParameterf(GlApi.TEXTURE_2D, GlApi.MAX_ANISOTROPY,
+                                      MathF.Min(8f, maxAnisotropy));
+            }
         }
         else
         {

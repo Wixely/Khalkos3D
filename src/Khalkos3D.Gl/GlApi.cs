@@ -48,6 +48,9 @@ public sealed unsafe class GlApi
     internal const int LINEAR = 0x2601, NEAREST = 0x2600;
     internal const int LINEAR_MIPMAP_LINEAR = 0x2703, NEAREST_MIPMAP_LINEAR = 0x2702;
     internal const int REPEAT = 0x2901, CLAMP_TO_EDGE = 0x812F, MIRRORED_REPEAT = 0x8370;
+    // EXT_texture_filter_anisotropic. Core in neither GL 3.3 nor ES 3.0, but near-universal on both
+    // desktop drivers and phone GPUs — asked for, never assumed. See TextureAt.
+    internal const uint MAX_ANISOTROPY = 0x84FE, MAX_MAX_ANISOTROPY = 0x84FF;
     internal const uint FRAMEBUFFER = 0x8D40, RENDERBUFFER = 0x8D41;
     internal const uint COLOR_ATTACHMENT0 = 0x8CE0, DEPTH_ATTACHMENT = 0x8D00;
     internal const uint DEPTH_COMPONENT24 = 0x81A6, FRAMEBUFFER_COMPLETE = 0x8CD5;
@@ -57,6 +60,7 @@ public sealed unsafe class GlApi
     internal delegate* unmanaged<uint, byte*> GetString;
     internal delegate* unmanaged<uint> GetError;
     internal delegate* unmanaged<uint, int*, void> GetIntegerv;
+    internal delegate* unmanaged<uint, float*, void> GetFloatv;
     internal delegate* unmanaged<int, int, int, int, void> Viewport;
     internal delegate* unmanaged<float, float, float, float, void> ClearColor;
     internal delegate* unmanaged<uint, void> Clear;
@@ -110,6 +114,7 @@ public sealed unsafe class GlApi
     internal delegate* unmanaged<uint, uint, void> BindTexture;
     internal delegate* unmanaged<int, uint*, void> DeleteTextures;
     internal delegate* unmanaged<uint, uint, int, void> TexParameteri;
+    internal delegate* unmanaged<uint, uint, float, void> TexParameterf;
     internal delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void> TexImage2D;
     internal delegate* unmanaged<uint, void> GenerateMipmap;
     internal delegate* unmanaged<int, int, int, int, uint, uint, void*, void> ReadPixels;
@@ -172,6 +177,7 @@ public sealed unsafe class GlApi
         gl.GetString = (delegate* unmanaged<uint, byte*>)P("glGetString");
         gl.GetError = (delegate* unmanaged<uint>)P("glGetError");
         gl.GetIntegerv = (delegate* unmanaged<uint, int*, void>)P("glGetIntegerv");
+        gl.GetFloatv = (delegate* unmanaged<uint, float*, void>)P("glGetFloatv");
         gl.Viewport = (delegate* unmanaged<int, int, int, int, void>)P("glViewport");
         gl.ClearColor = (delegate* unmanaged<float, float, float, float, void>)P("glClearColor");
         gl.Clear = (delegate* unmanaged<uint, void>)P("glClear");
@@ -225,6 +231,7 @@ public sealed unsafe class GlApi
         gl.BindTexture = (delegate* unmanaged<uint, uint, void>)P("glBindTexture");
         gl.DeleteTextures = (delegate* unmanaged<int, uint*, void>)P("glDeleteTextures");
         gl.TexParameteri = (delegate* unmanaged<uint, uint, int, void>)P("glTexParameteri");
+        gl.TexParameterf = (delegate* unmanaged<uint, uint, float, void>)P("glTexParameterf");
         gl.TexImage2D = (delegate* unmanaged<uint, int, int, int, int, int, uint, uint, void*, void>)P("glTexImage2D");
         gl.GenerateMipmap = (delegate* unmanaged<uint, void>)P("glGenerateMipmap");
         gl.ReadPixels = (delegate* unmanaged<int, int, int, int, uint, uint, void*, void>)P("glReadPixels");
