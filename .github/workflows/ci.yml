@@ -161,8 +161,13 @@ jobs:
             binary: khalkos3d-demo
             native: libglfw.so.3
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write          # only used on a tag, to attach the download to the release
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true     # the release notes are the tag's own message
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -213,11 +218,51 @@ jobs:
             || { echo "::error::the binary did not reach its own argument handling"; exit 1; }
           echo "ok: the published executable starts and runs its own code"
 
+      # One archive rather than three loose files, because "download these three and keep them
+      # together" is a step people skip and then report a broken demo.
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            powershell -Command "Compress-Archive -Path * -DestinationPath ../khalkos3d-demo-${{ matrix.rid }}.zip"
+          else
+            zip -r "../khalkos3d-demo-${{ matrix.rid }}.zip" .
+          fi
+          cd ..
+          ls -l khalkos3d-demo-${{ matrix.rid }}.zip
+
       - uses: actions/upload-artifact@v4
         with:
           name: khalkos3d-demo-${{ matrix.rid }}
-          path: out/
+          path: khalkos3d-demo-${{ matrix.rid }}.zip
           if-no-files-found: error
+
+      # ON A TAG, THE DOWNLOAD BECOMES A RELEASE ASSET. A workflow artifact needs a GitHub login and
+      # expires; the README points at /releases/latest, and a link with nothing behind it is worse
+      # than no link.
+      #
+      # The two matrix legs race to create the release, so creating it is allowed to fail — whichever
+      # arrives second finds it already there and uploads into it. --clobber so re-running a tag
+      # replaces the asset rather than erroring, which matches the package push's --skip-duplicate.
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # The annotated tag already carries the release notes; they are written once, at the moment
+          # the release is cut, rather than twice in two places that can disagree.
+          git tag -l --format='%(contents)' "$TAG" > notes.md
+          echo "--- notes ---"; cat notes.md
+
+          gh release create "$TAG" --title "Khalkos3D $TAG" --notes-file notes.md --verify-tag \
+            || echo "the release already exists; uploading into it"
+          gh release upload "$TAG" "khalkos3d-demo-${{ matrix.rid }}.zip" --clobber
+          echo "attached khalkos3d-demo-${{ matrix.rid }}.zip to $TAG"
 
   androiddemo:
     name: The demo builds for Android, and comes out installable
