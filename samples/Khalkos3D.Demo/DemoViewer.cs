@@ -55,6 +55,12 @@ public sealed class DemoViewer : IDisposable
         Environment = Khalkos3D.Environment.Studio with { Intensity = 0.55f },
     };
 
+    /// <summary>How much of the fitted distance the demo opens at. Closer than the fit, because the
+    /// fit surrounds EVERYTHING — the outer ring of cubes and the haze around them — while the thing
+    /// worth looking at is in the middle of that. A viewer framing an unfamiliar file should still
+    /// use the whole distance; this one knows what its scene contains.</summary>
+    private const float Opening = 0.66f;
+
     private int _width = 1, _height = 1;
 
     /// <summary>Why the renderer would not start, or null when it did.</summary>
@@ -111,7 +117,7 @@ public sealed class DemoViewer : IDisposable
         _focus = model.Focus;
         _scene = _model.At(0f);
         _settings = _settings with { Up = model.Up, Lights = _model.LightsAt(0f) };
-        _orbit.Frame(_focus, model.Up, Aspect);
+        _orbit.Frame(_focus, model.Up, Aspect, zoom: Opening);
         _clock.Restart();
 
         // Built here rather than on the first frame that needs one, so a host can print the outcome

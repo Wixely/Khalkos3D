@@ -18,6 +18,10 @@ public sealed class OrbitController
 {
     private BoundingBox _bounds = BoundingBox.Empty;
 
+    // The framing this controller was given, kept so Reset can actually return to it rather than to
+    // the defaults it happens to share with most callers.
+    private float _yaw = 0.6f, _pitch = 0.5f, _zoom = 1f;
+
     /// <summary>The camera, after everything done to it so far.</summary>
     public Camera Camera { get; private set; } = Camera.Frame(BoundingBox.Empty);
 
@@ -38,13 +42,24 @@ public sealed class OrbitController
     public float ZoomPerTick { get; init; } = 1.1f;
 
     /// <summary>Frame a model, replacing any previous view.</summary>
+    /// <param name="bounds">What must be visible.</param>
+    /// <param name="up">Which axis the model treats as up.</param>
+    /// <param name="aspect">Viewport width over height.</param>
+    /// <param name="yaw">Rotation about the up axis, radians.</param>
+    /// <param name="pitch">Elevation above the horizon, radians.</param>
+    /// <param name="zoom">Multiplies the fitted distance: below 1 opens closer in. An application
+    /// that knows its own scene — a viewer whose subject sits in the middle of a wider arrangement,
+    /// say — usually knows better than a bounding sphere how much of the frame it wants filled.</param>
     public void Frame(BoundingBox bounds, UpAxis up, float aspect = 1f,
-                      float yaw = 0.6f, float pitch = 0.5f)
+                      float yaw = 0.6f, float pitch = 0.5f, float zoom = 1f)
     {
         _bounds = bounds;
         Up = up;
         Aspect = aspect > 0f ? aspect : 1f;
-        Camera = Camera.Frame(bounds, up, yaw, pitch, aspect: Aspect);
+        _yaw = yaw;
+        _pitch = pitch;
+        _zoom = zoom > 0f && float.IsFinite(zoom) ? zoom : 1f;
+        Camera = Camera.Frame(bounds, up, _yaw, _pitch, _zoom, aspect: Aspect);
     }
 
     /// <summary>Frame a scene, taking its up axis from the file.</summary>
@@ -103,7 +118,12 @@ public sealed class OrbitController
         Camera = Camera.Zoom(MathF.Pow(ZoomPerTick, -ticks));
     }
 
-    /// <summary>Return to the framing this controller started from, keeping the current aspect. The
-    /// escape hatch every viewer needs after a user has lost the model off screen.</summary>
-    public void Reset() => Frame(_bounds, Up, Aspect);
+    /// <summary>
+    /// Return to the framing this controller started from, keeping the current aspect. The escape
+    /// hatch every viewer needs after a user has lost the model off screen.
+    ///
+    /// <para>The framing it started from, not the defaults: an application that opened on a
+    /// particular angle or closer in gets that view back, which is the one its user recognises.</para>
+    /// </summary>
+    public void Reset() => Frame(_bounds, Up, Aspect, _yaw, _pitch, _zoom);
 }

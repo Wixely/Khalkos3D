@@ -163,6 +163,42 @@ public class ViewerTests
     }
 
     [Fact]
+    public void A_viewer_can_open_closer_than_the_fit()
+    {
+        var bounds = Box(10);
+        var fitted = new OrbitController();
+        fitted.Frame(bounds, UpAxis.Z, aspect: 1.6f);
+
+        var closer = new OrbitController();
+        closer.Frame(bounds, UpAxis.Z, aspect: 1.6f, zoom: 0.5f);
+
+        Assert.Equal(fitted.Camera.Distance * 0.5f, closer.Camera.Distance, 3);
+    }
+
+    [Fact]
+    public void Reset_returns_to_the_view_the_application_opened_on()
+    {
+        // Not to the defaults. An application that opens closer in, or on a particular angle, has
+        // told its user what "the view" looks like — and that is the one they expect back.
+        var controller = new OrbitController();
+        controller.Frame(Box(10), UpAxis.Z, aspect: 1.6f, yaw: 1.2f, pitch: 0.3f, zoom: 0.6f);
+        var opened = controller.Camera;
+
+        controller.Orbit(0.4f, 0.25f);
+        controller.Zoom(9f);
+        controller.Pan(0.3f, 0.2f);
+        Assert.NotEqual(opened, controller.Camera);
+
+        controller.Reset();
+
+        Assert.Equal(opened.Distance, controller.Camera.Distance, 3);
+        Assert.Equal(opened.Target, controller.Camera.Target);
+        var wanted = Vector3.Normalize(opened.Position - opened.Target);
+        var got = Vector3.Normalize(controller.Camera.Position - controller.Camera.Target);
+        Assert.True(Vector3.Dot(wanted, got) > 0.9999f, "reset should restore the opening angle too");
+    }
+
+    [Fact]
     public void Reset_recovers_a_view_that_has_been_lost()
     {
         // Every viewer needs this, because every viewer's user eventually pans the model off screen
