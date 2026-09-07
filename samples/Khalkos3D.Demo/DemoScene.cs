@@ -129,38 +129,51 @@ public static class DemoScene
         """, name: "brushed copper");
 
     /// <summary>
-    /// A shader the sample supplies, on the orbiting cubes: bands of light sliding along them.
+    /// The shader on the orbiting cubes: iron heated until it glows, breathing between dull red and
+    /// nearly white.
     ///
-    /// <para><b>Here to prove the claim, not to decorate.</b> This is a
-    /// <see cref="ShaderKind.Surface"/> shader, so it contains no version directive, no varyings and
-    /// no lighting — which is why the same few lines compile on desktop GL 3.3, on the phone's
-    /// GLES 3.0 and in a browser's WebGL2, and why the cubes still answer W, N and B like everything
-    /// else on screen.</para>
+    /// <para><b>Its heat is a uniform rather than a clock.</b> The same number drives the light each
+    /// cube casts into the scene, and a shader that computed its own pulse from the time would be the
+    /// same curve written twice in two languages — where the glow and the light it throws would drift
+    /// apart the first time either was edited. One value, set from C#, used by both.</para>
     ///
-    /// <para><b>Built once, held forever.</b> The renderer compiles a program against this object's
-    /// identity, so a static field is one compile for the life of the process. Rebuilding an
-    /// identical shader every frame would be a compile every frame, which is the one way to make this
-    /// feature expensive.</para>
+    /// <para>This is a <see cref="ShaderKind.Surface"/> shader, so it contains no version directive,
+    /// no varyings and no lighting: the same lines compile on desktop GL 3.3, on the phone's GLES 3.0
+    /// and in a browser's WebGL2, the cubes still answer W, N and B, and — having been written before
+    /// the engine had more than one light — it is lit by all five of them without a word about it.</para>
     /// </summary>
-    private static readonly Shader Bands = Shader.Surface("""
-        uniform float uTime;
-        uniform vec3  uGlow;
+    private static readonly Shader Hot = Shader.Surface("""
+        uniform float uHeat;    // 0 dull iron, 1 at its hottest
+        uniform vec3  uEmber;   // the colour at that peak
 
         void surface(inout Surface s) {
-            // Bands climbing the world's up axis and sliding with the clock. World space rather than
-            // object space on purpose: the cubes spin, and a pattern locked to the cube would turn
-            // with it and read as paint rather than as something moving through it.
-            float wave = sin((s.world.y - uTime * 0.55) * 17.0);
-            // Narrow, so they read as bands crossing the cube rather than as a lighter half of it.
-            float band = smoothstep(0.55, 0.97, wave);
+            // Hotter around the silhouette: a glowing solid is brighter where you look through more
+            // of it, and this is the cheap stand-in for that — the same reason a hot bar looks like
+            // it has a bright edge.
+            float rim = pow(1.0 - max(dot(normalize(s.normal), s.view), 0.0), 2.0);
 
-            s.baseColor.rgb = mix(s.baseColor.rgb, uGlow, band * 0.55);
-            s.roughness = mix(s.roughness, 0.12, band);
-            // Emissive, so a band is light rather than a lighter colour: it stays bright on the face
-            // pointing away from the lamp, which is what tells a viewer it is not merely shading.
-            s.emissive = uGlow * band * 0.75;
+            // Crust, in the model's own space so it stays on the iron while the cube tumbles. A flat
+            // face of a solid emissive colour reads as a card rather than as metal: real hot metal is
+            // uneven, cooler where scale has formed and brighter in the cracks between.
+            float crust = 0.5 + 0.5 * sin(s.object.x * 26.0) * sin(s.object.y * 21.0) * sin(s.object.z * 31.0);
+            crust = mix(crust, 0.5 + 0.5 * sin(s.object.x * 61.0 + 2.1) * sin(s.object.z * 47.0 - 1.3), 0.45);
+
+            float glow = uHeat * (0.55 + 0.45 * rim) * (0.80 + 0.34 * crust);
+
+            // Up the blackbody ramp: dull red first, then the ember colour, then towards white at the
+            // top of the pulse. Metal does not brighten while keeping its hue, and a glow that does
+            // reads as a light bulb painted orange.
+            vec3 hot = mix(vec3(0.85, 0.09, 0.02), uEmber, smoothstep(0.15, 0.85, uHeat));
+            // Only a hint of white at the very top: iron this bright is rare, and a cube that
+            // reaches white every cycle reads as a lamp rather than as metal.
+            hot = mix(hot, vec3(1.0, 0.93, 0.82), smoothstep(0.88, 1.0, uHeat) * 0.30);
+
+            s.baseColor.rgb = mix(s.baseColor.rgb, hot * 0.30, glow);
+            s.metallic = mix(s.metallic, 0.15, glow);
+            s.roughness = mix(s.roughness, 0.45, glow);
+            s.emissive = hot * glow * 1.7;
         }
-        """, name: "bands");
+        """, name: "hot iron");
 
     /// <summary>
     /// The Khalkos3D logo, turning, with metal spheres and dielectric cubes in orbit around it.
@@ -273,29 +286,63 @@ public static class DemoScene
                 Bob: 0.30f));
         }
 
-        // The cubes' materials are rebuilt every frame, because one of their shader's uniforms is the
-        // clock. Everything ahead of them in the list is fixed and the order never changes — the
-        // orbiters above hold indices into it.
+        // The cubes' materials are rebuilt every frame, because their heat changes. Everything ahead
+        // of them in the list is fixed and the order never changes — the orbiters above hold indices
+        // into it.
         IReadOnlyList<Material> Dress(float seconds)
         {
             var all = new List<Material>(materials);
             for (var i = 0; i < cubes; i++)
             {
-                var roughness = 0.12f + i * (0.66f / (cubes - 1));
+                var heat = Heat(seconds, i);
                 all.Add(new Material
                 {
-                    Name = $"plastic-{roughness:0.00}",
-                    BaseColor = new Vector4(0.20f, 0.45f, 0.85f, 1f),
-                    Roughness = roughness,
-                    Shader = Bands,
+                    Name = $"iron-{i}",
+                    // Cold iron underneath, which is what the glow is mixed into rather than added
+                    // on top of: a hot bar is not a cold bar with light in front of it.
+                    BaseColor = new Vector4(0.16f, 0.15f, 0.15f, 1f),
+                    Metallic = 1f,
+                    Roughness = 0.55f,
+                    Shader = Hot,
                     ShaderValues = new Dictionary<string, ShaderValue>
                     {
-                        ["uTime"] = seconds + i * 0.7f,   // offset, so the four are not one animation
-                        ["uGlow"] = new Vector3(0.95f, 0.55f, 0.25f),
+                        ["uHeat"] = heat,
+                        ["uEmber"] = Ember,
                     },
                 });
             }
             return all;
+        }
+
+        // WHAT THE CUBES THROW INTO THE SCENE, which is the point of them being hot rather than
+        // merely painted hot. Each is a point light at the cube's own position, coloured by the same
+        // heat its shader is given and reaching about as far as the ring is wide — so the logo and
+        // the spheres are lit by four moving lamps that brighten and fade, and the light on them
+        // agrees with the glow you can see because both come from one number.
+        //
+        // The key light is spelled out here rather than left to the renderer: a filled Lights list
+        // REPLACES the default rather than adding to it, so a scene that lights itself has to say
+        // that it still wants the lamp everything else is lit by.
+        IReadOnlyList<Light> Lights(float seconds)
+        {
+            var lights = new List<Light>(cubes + 1)
+            {
+                // Dimmer than the engine's default key light, so the four moving lamps are visibly
+                // doing the work rather than adding a tint to something already fully lit.
+                Light.Directional(RenderSettings.Default.LightDirection, new Vector3(0.9f)),
+            };
+
+            for (var i = 0; i < cubes; i++)
+            {
+                var heat = Heat(seconds, i);
+                var where = orbiters[spheres + i].At(seconds).Transform.Translation;
+                // Cubed, so the light falls away faster than the glow does. A lamp that dims linearly
+                // with a visible ember reads as a light with a painted object near it; light from
+                // something actually hot goes almost out while the metal is still visibly red.
+                lights.Add(Light.Point(where, Ember * (20f * heat * heat * heat), range: 6.5f));
+            }
+
+            return lights;
         }
 
         var parts = new Scene
@@ -323,7 +370,28 @@ public static class DemoScene
 
             foreach (var orbiter in orbiters) nodes.Add(orbiter.At(seconds));
             return nodes;
-        }, Dress);
+        }, Dress, Lights);
+    }
+
+    /// <summary>The colour these cubes glow at the top of their pulse, linear RGB.</summary>
+    private static readonly Vector3 Ember = new(1.0f, 0.42f, 0.10f);
+
+    /// <summary>
+    /// How hot one cube is at a moment: 0 is dull iron, 1 is the top of its pulse.
+    ///
+    /// <para><b>One curve, used twice.</b> It is handed to the shader as a uniform and used again to
+    /// colour the light that cube casts, so the glow and the light always agree. Computing the pulse
+    /// inside the shader would be the same maths in two languages, and the first edit to either would
+    /// leave a cube that glows without lighting anything, or lights the scene while looking cold.</para>
+    ///
+    /// <para>Squared rather than a plain sine, and never quite zero: heat lingers at the bottom of a
+    /// cycle and peaks sharply, which is what makes it read as something cooling and reheating rather
+    /// than as a brightness slider being waved.</para>
+    /// </summary>
+    private static float Heat(float seconds, int cube)
+    {
+        var pulse = 0.5f + 0.5f * MathF.Sin(seconds * 1.15f + cube * 1.7f);
+        return 0.12f + 0.88f * pulse * pulse;
     }
 
     /// <summary>

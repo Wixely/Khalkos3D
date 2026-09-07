@@ -100,6 +100,31 @@ with nothing to reflect it correctly renders near-black and every user reads tha
 The environment is a sky/horizon/ground gradient rather than an image: no HDR decoder, no
 precomputation, no asset to ship, no per-platform texture format, and identical on all six targets.
 
+**Up to eight lights**, directional or point, in any mix:
+
+```csharp
+var settings = RenderSettings.Default with
+{
+    Lights =
+    [
+        Light.Directional(new Vector3(-0.4f, -0.8f, -0.5f), new Vector3(2.6f)),   // the key
+        Light.Point(furnace, new Vector3(9f, 3.8f, 0.9f), range: 6.5f),           // a lamp in the scene
+    ],
+};
+```
+
+Leave `Lights` empty and you get the single key light from `LightDirection` and `LightColor`, exactly
+as before — filling it in replaces that light rather than adding to it, so a scene lit entirely by its
+own lamps is possible. Point lights fall off by inverse square, windowed so they reach zero at their
+range instead of touching every fragment in the scene forever. Past `Light.Max` the extras are
+dropped in the order you gave them, because only you know whether that order should be distance,
+brightness, or what the picture is about.
+
+The cost of the ones you do not use is the uniform slots they reserve: the shader loops to the count,
+not to the array size, so two lights do two lights' work. **And a surface shader written before any of
+this gets every light for free** — a hook sets the base colour and the roughness, and how many lights
+are summed afterwards is none of its business.
+
 ### You can write the shader
 
 Materials are metallic-roughness PBR out of the box. When that is not the surface you wanted, hand the
@@ -224,11 +249,17 @@ are cached by reference and nothing is re-uploaded. That is why an engine with n
 no scene-graph mutation and no update loop can still show something moving, and why the hosts gained
 not one line for it: `DemoViewer` keeps the clock.
 
-**The bands crossing the cubes are a shader the sample supplies**, and they are there to be checked
-rather than admired: the desktop app prints whether it compiled and the Android app logs it, so the
-same seven lines are known to build on a desktop GL compiler and on a phone's GLES one — which are
-different compilers, and the reason "it runs everywhere" is a claim worth testing rather than
-asserting.
+**The logo and the cubes both carry shaders the sample supplies**, and they are there to be checked
+rather than admired: the desktop app prints whether they compiled and the Android app logs it, so the
+same lines are known to build on a desktop GL compiler and on a phone's GLES one — which are different
+compilers, and the reason "it runs everywhere" is a claim worth testing rather than asserting. The K
+is brushed copper, its grain in the model's own space so it stays on the metal as it turns; the cubes
+are iron heated until it glows, breathing between dull red and nearly white.
+
+**The cubes are also lights.** Each is a point light at its own position, coloured by the same heat
+value its shader is given — one number, so the glow you see and the light it throws can never disagree
+— and what they illuminate is everything else in the scene, including a logo whose custom shader
+knows nothing about them.
 
 ### Where the code lives, which is the point
 

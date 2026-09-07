@@ -592,8 +592,7 @@ public sealed unsafe class GlRenderer : IDisposable
         var u = program.U;
 
         SetVector3(u.CamPos, camera.Position);
-        SetVector3(u.LightDir, Normalise(settings.LightDirection, new Vector3(0, -1, 0)));
-        SetVector3(u.LightColor, settings.LightColor);
+        ApplyLights(u, settings);
 
         var environment = settings.Environment;
         var intensity = MathF.Max(environment.Intensity, 0f);
@@ -614,6 +613,48 @@ public sealed unsafe class GlRenderer : IDisposable
         // when a frame first reaches a program rather than per draw.
         gl.Uniform1i(u.Tex, 0);
         gl.Uniform1i(u.NormalTex, 1);
+    }
+
+    /// <summary>
+    /// Push the frame's lights into one program.
+    ///
+    /// <para><b>An empty <see cref="RenderSettings.Lights"/> means the key light</b>, built here from
+    /// <see cref="RenderSettings.LightDirection"/> and <see cref="RenderSettings.LightColor"/>. That
+    /// is what makes this change invisible to every caller who never asked for it, and it is done
+    /// without allocating a list to hold one light in.</para>
+    ///
+    /// <para>Past <see cref="Light.Max"/> the extras are dropped rather than wrapped or averaged.
+    /// Which ones survive is the caller's decision, made by the order they were given in — only they
+    /// know whether that should be by distance, by brightness, or by what the picture is about.</para>
+    /// </summary>
+    private void ApplyLights(Uniforms u, RenderSettings settings)
+    {
+        var lights = settings.Lights;
+        var count = lights.Count == 0 ? 1 : Math.Min(lights.Count, Light.Max);
+        _gl.Uniform1i(u.LightCount, count);
+
+        if (lights.Count == 0)
+        {
+            SetLight(u, 0, Light.Directional(
+                Normalise(settings.LightDirection, new Vector3(0, -1, 0)), settings.LightColor));
+            return;
+        }
+
+        for (var i = 0; i < count; i++) SetLight(u, i, lights[i]);
+    }
+
+    private void SetLight(Uniforms u, int slot, Light light)
+    {
+        var vector = light.Kind == LightKind.Directional
+            ? Normalise(light.Vector, new Vector3(0, -1, 0))
+            : light.Vector;
+
+        SetVector3(u.LightVector[slot], vector);
+        SetVector3(u.LightColor[slot], light.Color);
+        // Zero is what marks a light directional in the shader: a point light with no reach is not a
+        // light, so the value is free to mean something else.
+        if (u.LightRange[slot] >= 0)
+            _gl.Uniform1f(u.LightRange[slot], light.Kind == LightKind.Point ? MathF.Max(light.Range, 1e-4f) : 0f);
     }
 
     /// <summary>
@@ -723,7 +764,15 @@ public sealed unsafe class GlRenderer : IDisposable
     /// uniform away, which is legal and is why every setter tolerates it.</summary>
     private sealed class Uniforms
     {
-        internal readonly int Mvp, Model, NormalMatrix, CamPos, LightDir, LightColor;
+        internal readonly int Mvp, Model, NormalMatrix, CamPos, LightCount;
+
+        /// <summary>One location per array element. Resolved element by element because that is how
+        /// GL addresses them — <c>uLightColor[3]</c> is its own name — and doing it once here is what
+        /// keeps a per-light string lookup out of every frame.</summary>
+        internal readonly int[] LightVector = new int[Light.Max];
+        internal readonly int[] LightColor = new int[Light.Max];
+        internal readonly int[] LightRange = new int[Light.Max];
+
         internal readonly int SkyColor, HorizonColor, GroundColor, UpAxis;
         internal readonly int BaseColor, Metallic, Roughness, Emissive, Tex, HasTex;
         internal readonly int NormalTex, HasNormalMap;
@@ -737,8 +786,13 @@ public sealed unsafe class GlRenderer : IDisposable
             Model = Find(gl, program, "uModel");
             NormalMatrix = Find(gl, program, "uNormalMatrix");
             CamPos = Find(gl, program, "uCamPos");
-            LightDir = Find(gl, program, "uLightDir");
-            LightColor = Find(gl, program, "uLightColor");
+            LightCount = Find(gl, program, "uLightCount");
+            for (var i = 0; i < Light.Max; i++)
+            {
+                LightVector[i] = Find(gl, program, $"uLightVector[{i}]");
+                LightColor[i] = Find(gl, program, $"uLightColor[{i}]");
+                LightRange[i] = Find(gl, program, $"uLightRange[{i}]");
+            }
             SkyColor = Find(gl, program, "uSkyColor");
             HorizonColor = Find(gl, program, "uHorizonColor");
             GroundColor = Find(gl, program, "uGroundColor");

@@ -74,9 +74,20 @@ internal static class ShaderSource
     /// declaring anything, and declare uniforms of its own in the same breath.</para>
     /// </summary>
     internal static string FragmentWith(GlslDialect dialect, string? hook) =>
-        Header(dialect) + FragmentPrelude
+        Header(dialect) + Prelude
         + (string.IsNullOrWhiteSpace(hook) ? SurfaceSignature + " {}\n" : hook + "\n")
         + FragmentMain;
+
+    /// <summary>
+    /// The fragment prelude with the light array size filled in from <see cref="Light.Max"/>.
+    ///
+    /// <para>Substituted rather than written into the GLSL by hand, because a shader declaring eight
+    /// while the renderer pushed nine would be a defect nothing catches: GL ignores a write past the
+    /// end of a uniform array, so the ninth light would simply never arrive and the scene would be
+    /// dim for no visible reason. One constant, in Core, next to the type that counts them.</para>
+    /// </summary>
+    private static readonly string Prelude = FragmentPrelude.Replace(
+        "MAX_LIGHTS", Light.Max.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     private const string VertexPrelude = """
         in vec3 aPos;
@@ -150,8 +161,18 @@ internal static class ShaderSource
         uniform float uRoughness;
         uniform vec3  uEmissive;
         uniform vec3  uCamPos;
-        uniform vec3  uLightDir;
-        uniform vec3  uLightColor;
+
+        // THE LIGHTS, as three parallel arrays of MAX_LIGHTS. The loop below runs to uLightCount and
+        // not to the array size, so a scene with two lights does two lights' work and the rest of the
+        // array costs nothing but the uniform slots it reserves.
+        //
+        //   uLightVector — the direction a directional light TRAVELS, or where a point light IS
+        //   uLightColor  — colour and intensity together
+        //   uLightRange  — how far a point light reaches; 0 marks the light as directional
+        uniform vec3  uLightVector[MAX_LIGHTS];
+        uniform vec3  uLightColor[MAX_LIGHTS];
+        uniform float uLightRange[MAX_LIGHTS];
+        uniform int   uLightCount;
         uniform vec3  uSkyColor;
         uniform vec3  uHorizonColor;
         uniform vec3  uGroundColor;
@@ -285,29 +306,55 @@ internal static class ShaderSource
             }
 
             vec3 albedo = s.baseColor.rgb;
-            vec3 L = normalize(-uLightDir);
-            vec3 H = normalize(V + L);
-
-            float NdotL = max(dot(N, L), 0.0);
             float NdotV = max(dot(N, V), 0.0001);
-            float NdotH = max(dot(N, H), 0.0);
-            float VdotH = max(dot(V, H), 0.0);
 
             float rough = clamp(s.roughness, 0.05, 1.0);
             float a  = rough * rough;
             float a2 = a * a;
-            float d  = NdotH * NdotH * (a2 - 1.0) + 1.0;
-            float D  = a2 / max(PI * d * d, 0.0001);
+            float k  = (rough + 1.0) * (rough + 1.0) / 8.0;
+            vec3  F0 = mix(vec3(0.04), albedo, s.metallic);
 
-            float k = (rough + 1.0) * (rough + 1.0) / 8.0;
-            float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+            // Every light, summed. The terms that depend only on the surface and the viewer are
+            // computed once above; everything inside depends on where this particular light is.
+            vec3 direct = vec3(0.0);
+            for (int i = 0; i < uLightCount; i++) {
+                vec3 L;
+                float attenuation = 1.0;
 
-            vec3 F0 = mix(vec3(0.04), albedo, s.metallic);
-            vec3 F  = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+                if (uLightRange[i] <= 0.0) {
+                    L = normalize(-uLightVector[i]);
+                } else {
+                    vec3 offset = uLightVector[i] - s.world;
+                    float distance = max(length(offset), 0.0001);
+                    L = offset / distance;
 
-            vec3 spec   = (D * G * F) / max(4.0 * NdotV * NdotL, 0.0001);
-            vec3 kD     = (vec3(1.0) - F) * (1.0 - s.metallic);
-            vec3 direct = (kD * albedo / PI + spec) * NdotL * uLightColor;
+                    // Inverse square, WINDOWED to reach exactly zero at the range. Pure inverse
+                    // square never gets there, so every lamp would touch every fragment in the scene
+                    // forever — the same cost as a light you can see, and a faint wash nobody asked
+                    // for. The squared window is the usual one: it fades smoothly rather than
+                    // cutting off at a visible edge.
+                    float ratio = clamp(distance / uLightRange[i], 0.0, 1.0);
+                    float window = 1.0 - ratio * ratio * ratio * ratio;
+                    attenuation = window * window / (distance * distance);
+                }
+
+                float NdotL = max(dot(N, L), 0.0);
+                if (NdotL <= 0.0 || attenuation <= 0.0) continue;
+
+                vec3 H = normalize(V + L);
+                float NdotH = max(dot(N, H), 0.0);
+                float VdotH = max(dot(V, H), 0.0);
+
+                float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+                float D = a2 / max(PI * d * d, 0.0001);
+                float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+                vec3  F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+
+                vec3 spec = (D * G * F) / max(4.0 * NdotV * NdotL, 0.0001);
+                vec3 kD   = (vec3(1.0) - F) * (1.0 - s.metallic);
+
+                direct += (kD * albedo / PI + spec) * NdotL * uLightColor[i] * attenuation;
+            }
 
             // IMAGE-BASED LIGHTING, APPROXIMATED. A metal has no diffuse colour at all — everything
             // visible on chrome is a reflection — so with nothing to reflect it renders black and

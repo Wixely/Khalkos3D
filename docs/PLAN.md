@@ -105,7 +105,8 @@ of it, which is why it went first.
 llvmpipe on CI).
 
 Done: instanced entry-point table from a supplied `Func<string, nint>` · Cook-Torrance
-metallic-roughness with one directional light and a flat ambient term · depth, winding,
+metallic-roughness with a directional light and a flat ambient term (up to eight lights of
+either kind since [M6](#m6-more-than-one-light)) · depth, winding,
 `doubleSided`, `alphaMode` MASK and sorted BLEND · interleaved vertex upload cached per `Mesh`, so a
 plate of twenty instances uploads once · textures cached per `ImageData` · `Camera` with
 fit-to-bounds, orbit and zoom · wireframe and normals debug views · `GlOffscreenTarget` for headless
@@ -302,7 +303,44 @@ because the linker happened to assign the one location left over. A caller's who
 its attributes in another order would have got a silently wrong normal map — the exact class of
 defect that only appears on somebody else's driver.
 
-### M6 · Animation — **reassess before starting**
+### M6 · More than one light — **done**
+
+Up to `Light.Max` lights per frame, directional or point, in any mix. `RenderSettings.Lights` empty
+means the key light that was always there, so the change is invisible to callers who never asked for
+it — and a render test asserts the two frames are identical rather than merely similar.
+
+**A fixed array, and the count is a uniform rather than the array size.** The shader declares
+`uLightVector[8]`, `uLightColor[8]`, `uLightRange[8]` and loops to `uLightCount`, so a scene with two
+lights does two lights' work and the six it did not fill cost nothing but the uniform slots they
+reserve — 24 vectors of the 224 that GLES 3.0 guarantees. Eight is the conventional forward-renderer
+size and more than a viewer has needed; the number is one constant, in Core, substituted into the
+GLSL so the two cannot disagree.
+
+**The loop bound is dynamic, and that is worth recording because the obvious worry is wrong.** The
+constant-bound restriction people remember is GLSL ES **1.00** — ES 2.0 and WebGL1. ES 3.00 allows
+fully dynamic loops and WebGL2 is ES 3.00, so paying only for the lights you use is available on
+every target here.
+
+**Point lights use a windowed inverse square.** Pure inverse square never reaches zero, so every lamp
+would touch every fragment in the scene forever — the same per-fragment cost as a light you can see,
+for a faint wash nobody asked for. The range is where it reaches exactly nothing, faded smoothly so
+there is no visible edge.
+
+Past the maximum the extras are dropped in the order given rather than wrapped, averaged, or merged.
+Which ones survive is the caller's decision, because only the caller knows whether that should be by
+distance, by brightness, or by what the picture is about.
+
+**What this cost the shaders people had already written: nothing.** A `Shader.Surface` hook sets the
+base colour and the roughness and never sees the lighting, so the demo's brushed copper — written when
+the engine had one light — is lit by five without a word about it. That is the argument for the
+surface layer holding the lighting, and this is the first time it has been tested.
+
+Not here: spot lights (a cone and its falloff, which nothing has asked for yet), shadows, and lights
+as nodes in the `Scene` graph. That last one is the real fork, and it is deliberately not taken —
+lights in the scene would make them part of the asset model, which is what a glTF's
+`KHR_lights_punctual` would want and what a viewer lighting somebody's STL would not.
+
+### M7 · Animation — **reassess before starting**
 
 Node animation and skinning. This is the point where the commitment changes shape: months rather than
 weeks, and the first thing that makes this feel like an engine rather than a viewer. It should be a
@@ -391,7 +429,8 @@ neither is a dependency of this repository: they are what a *caller* plugs into 
 | M3 diagnostics and sectioning | 1–2 weeks |
 | M4 textures and environment | ~1 week |
 | M5 shaders the caller writes | ~1 week |
-| M6 animation | months — reassess first |
+| M6 more than one light | ~1 day |
+| M7 animation | months — reassess first |
 
 **The estimate least worth trusting is M1, and not for the reason it looks.** The renderer itself is
 a known quantity. What is not is the verification: a headless GL context on CI, driver differences

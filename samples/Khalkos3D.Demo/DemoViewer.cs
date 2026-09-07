@@ -47,6 +47,12 @@ public sealed class DemoViewer : IDisposable
         // The demo owns the whole surface, so it clears. A host compositing this over its own
         // content would leave ClearColor null instead and draw on top of what is already there.
         ClearColor = new Vector4(0.055f, 0.063f, 0.078f, 1f),
+
+        // Dimmer than the studio default, because the built-in scene is lit by four lamps that move
+        // and pulse, and an ambient bright enough to light everything by itself would leave them
+        // adding a tint to a picture already finished. Not off: a metal with nothing to reflect
+        // renders black, which is the failure the environment exists to prevent.
+        Environment = Khalkos3D.Environment.Studio with { Intensity = 0.7f },
     };
 
     private int _width = 1, _height = 1;
@@ -104,7 +110,7 @@ public sealed class DemoViewer : IDisposable
         _model = model.WithGround();
         _focus = model.Focus;
         _scene = _model.At(0f);
-        _settings = _settings with { Up = model.Up };
+        _settings = _settings with { Up = model.Up, Lights = _model.LightsAt(0f) };
         _orbit.Frame(_focus, model.Up, Aspect);
         _clock.Restart();
 
@@ -197,7 +203,15 @@ public sealed class DemoViewer : IDisposable
     {
         if (_renderer is null) return;
 
-        if (_model is { Moves: true } model) _scene = model.At((float)_clock.Elapsed.TotalSeconds);
+        if (_model is { Moves: true } model)
+        {
+            var seconds = (float)_clock.Elapsed.TotalSeconds;
+            _scene = model.At(seconds);
+            // A scene may light itself — the demo's cubes are lamps — and those lamps move with it.
+            // An empty list is the renderer's own key light, so this is harmless for a scene that
+            // does not.
+            _settings = _settings with { Lights = model.LightsAt(seconds) };
+        }
 
         _renderer.Draw(_scene, _orbit.Camera, _width, _height, _settings);
         Frames++;

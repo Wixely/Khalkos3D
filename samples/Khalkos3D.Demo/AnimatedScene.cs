@@ -19,13 +19,16 @@ public sealed class AnimatedScene
     private readonly Scene _parts;
     private readonly Func<float, IReadOnlyList<Node>> _arrange;
     private readonly Func<float, IReadOnlyList<Material>>? _dress;
+    private readonly Func<float, IReadOnlyList<Light>>? _lights;
 
     private AnimatedScene(Scene parts, Func<float, IReadOnlyList<Node>> arrange,
-                          Func<float, IReadOnlyList<Material>>? dress, bool moves, BoundingBox? focus = null)
+                          Func<float, IReadOnlyList<Material>>? dress,
+                          Func<float, IReadOnlyList<Light>>? lights, bool moves, BoundingBox? focus = null)
     {
         _parts = parts;
         _arrange = arrange;
         _dress = dress;
+        _lights = lights;
         Moves = moves;
         // Framed at the start of the animation rather than continuously: a camera that reframed
         // itself as the orbiters swung about would drift for as long as the demo is left running.
@@ -44,19 +47,24 @@ public sealed class AnimatedScene
     /// It must return the same materials in the same order, because the nodes address them by index;
     /// what may change is what each one says. Materials are not cached on the GPU, so rebuilding them
     /// per frame costs an allocation and nothing else.</param>
+    /// <param name="lights">Optional: the lights at a given moment, for a scene lit by something
+    /// that moves — a lamp on an arm, or an object that is itself glowing. An empty result means the
+    /// renderer's own key light, so a scene that returns none is lit exactly as one that offers no
+    /// delegate at all.</param>
     public static AnimatedScene Moving(Scene parts, Func<float, IReadOnlyList<Node>> arrange,
-                                       Func<float, IReadOnlyList<Material>>? dress = null)
+                                       Func<float, IReadOnlyList<Material>>? dress = null,
+                                       Func<float, IReadOnlyList<Light>>? lights = null)
     {
         ArgumentNullException.ThrowIfNull(parts);
         ArgumentNullException.ThrowIfNull(arrange);
-        return new AnimatedScene(parts, arrange, dress, moves: true);
+        return new AnimatedScene(parts, arrange, dress, lights, moves: true);
     }
 
     /// <summary>A scene that does not move — a model as its file laid it out.</summary>
     public static AnimatedScene Still(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        return new AnimatedScene(scene, _ => scene.Roots, dress: null, moves: false, scene.Bounds);
+        return new AnimatedScene(scene, _ => scene.Roots, dress: null, lights: null, moves: false, scene.Bounds);
     }
 
     /// <summary>Whether <see cref="At"/> is worth calling more than once.</summary>
@@ -70,6 +78,12 @@ public sealed class AnimatedScene
 
     /// <summary>What the loader could not honour. Empty for a scene built in code.</summary>
     public LoadReport Report => _parts.Report;
+
+    /// <summary>
+    /// The lights <paramref name="seconds"/> after the scene appeared, or none — which means the
+    /// renderer's key light, and is what every scene that does not light itself returns.
+    /// </summary>
+    public IReadOnlyList<Light> LightsAt(float seconds) => _lights?.Invoke(seconds) ?? [];
 
     /// <summary>The scene as it stands <paramref name="seconds"/> after it appeared.</summary>
     public Scene At(float seconds) => new()
@@ -123,6 +137,7 @@ public sealed class AnimatedScene
             // The line material has to be appended per frame as well when the materials are rebuilt
             // per frame, or the index the two ground nodes hold would point past the end of the list.
             dress is null ? null : seconds => [.. dress(seconds), Shapes.LineMaterial],
+            _lights,
             Moves,
             Focus);
     }

@@ -20,6 +20,24 @@ public readonly record struct RenderSettings
     public Vector3 LightColor { get; init; } = new(2.6f, 2.6f, 2.6f);
 
     /// <summary>
+    /// The lights, when one key light is not enough — up to <see cref="Light.Max"/> of them, of any
+    /// mix of kinds.
+    ///
+    /// <para><b>Empty means the key light above, which is the whole compatibility story.</b> A caller
+    /// who never heard of this property gets exactly the frame they got before: one directional light
+    /// from <see cref="LightDirection"/> and <see cref="LightColor"/>. A caller who fills this in
+    /// REPLACES that light rather than adding to it — so a scene lit entirely by its own lamps is
+    /// possible, which it would not be if the key light were always present and only ever
+    /// supplemented.</para>
+    ///
+    /// <para>More than <see cref="Light.Max"/> is not an error and not a silent surprise either: the
+    /// first <see cref="Light.Max"/> are used, in the order given, and the rest are ignored. Sorting
+    /// them by what matters is the caller's job, because only the caller knows whether that is
+    /// distance, brightness or importance to the picture.</para>
+    /// </summary>
+    public IReadOnlyList<Light> Lights { get; init; } = [];
+
+    /// <summary>
     /// What the model is standing in. See <see cref="Khalkos3D.Environment"/> — without it a metal
     /// has nothing to reflect and renders black, which reads as a broken shader rather than as an
     /// empty room.
