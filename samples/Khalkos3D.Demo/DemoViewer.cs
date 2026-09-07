@@ -61,11 +61,13 @@ public sealed class DemoViewer : IDisposable
     /// worth looking at is in the middle of that. A viewer framing an unfamiliar file should still
     /// use the whole distance; this one knows what its scene contains.
     ///
-    /// <para>0.55 is the tightest value that never cuts anything off, checked by sweeping a whole
+    /// <para>0.62 is the tightest value that never cuts anything off, checked by sweeping a whole
     /// revolution of the rings — 33 seconds — rather than by looking at the opening frame. The
-    /// difference matters: everything fits at 0.5 for the first two seconds and then does not.</para>
+    /// difference matters: everything fits at 0.58 for the first second and a half and then does
+    /// not. Anything that changes the scene's extent changes this number, which is why it is
+    /// measured rather than chosen.</para>
     /// </summary>
-    private const float Opening = 0.55f;
+    private const float Opening = 0.62f;
 
     private int _width = 1, _height = 1;
 

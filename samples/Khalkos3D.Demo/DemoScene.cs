@@ -265,8 +265,11 @@ public static class DemoScene
 
         var orbiters = new List<Orbiter>();
 
-        // The inner ring: gold, metallic, sweeping roughness. Every one of these is the same mesh
-        // and a different material, which is the arrangement a real scene has.
+        // The inner ring: gold, metallic, sweeping roughness, and hanging BELOW the grid — which the
+        // grid being lines rather than a floor makes possible, and which gives the eye a reason to
+        // read it as a plane the scene passes through rather than as a backdrop behind everything.
+        // Every one of these is the same mesh and a different material, which is the arrangement a
+        // real scene has.
         const int spheres = 5;
         for (var i = 0; i < spheres; i++)
         {
@@ -285,7 +288,11 @@ public static class DemoScene
                 Mesh: 1,
                 Material: materials.Count - 1,
                 Radius: 2.6f,
-                Height: 0.95f,
+                // Just far enough under that the whole sphere clears the plane at the top of its
+                // wave — the radius plus the wave, and a little margin. Half a sphere poking through
+                // would read as one sunk into the floor rather than as one below it, and going deeper
+                // than this only makes the scene taller, which costs the camera the zoom it opens at.
+                Height: -0.9f,
                 Phase: MathF.Tau * i / spheres,
                 Orbit: 0.30f,
                 Spin: 0.9f,
