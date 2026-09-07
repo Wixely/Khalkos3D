@@ -66,6 +66,17 @@ public sealed class DemoViewer : IDisposable
     public long Frames { get; private set; }
 
     /// <summary>
+    /// What the renderer made of the shaders the current scene carries — one line each, whether or
+    /// not anything went wrong.
+    ///
+    /// <para>Reported rather than thrown, and reported even on success, for the same reason the
+    /// loader's notes are: a channel that only ever carries bad news is a channel nobody reads. A
+    /// shader that failed is named here and its material is drawn with the built-in program, so the
+    /// screen shows the model and this says why it is the wrong colour.</para>
+    /// </summary>
+    public IReadOnlyList<string> ShaderNotes { get; private set; } = [];
+
+    /// <summary>
     /// Start on a context somebody else has made current. False means the demo cannot run here and
     /// <see cref="Error"/> says why — a host should show that text rather than an empty window.
     /// </summary>
@@ -96,6 +107,29 @@ public sealed class DemoViewer : IDisposable
         _settings = _settings with { Up = model.Up };
         _orbit.Frame(_focus, model.Up, Aspect);
         _clock.Restart();
+
+        // Built here rather than on the first frame that needs one, so a host can print the outcome
+        // next to the driver string instead of discovering it mid-animation.
+        ShaderNotes = BuildShaders(_scene);
+    }
+
+    /// <summary>Compile every shader this scene carries, once each, and say how each went.</summary>
+    private IReadOnlyList<string> BuildShaders(Scene scene)
+    {
+        if (_renderer is null) return [];
+
+        List<string>? notes = null;
+        var seen = new HashSet<Shader>(ReferenceEqualityComparer.Instance as IEqualityComparer<Shader>
+                                       ?? EqualityComparer<Shader>.Default);
+
+        foreach (var material in scene.Materials)
+        {
+            if (material.Shader is not { } shader || !seen.Add(shader)) continue;
+            var report = _renderer.Prepare(shader);
+            (notes ??= []).Add(report.Summary ?? $"{shader.Name ?? "shader"}: compiled");
+        }
+
+        return (IReadOnlyList<string>?)notes ?? [];
     }
 
     /// <summary>The viewport changed size. Safe to call every frame.</summary>

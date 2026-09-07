@@ -25,18 +25,29 @@ namespace Khalkos3D.Gl;
 public sealed unsafe class GlRenderer : IDisposable
 {
     private readonly GlApi _gl;
-    private readonly uint _program;
-    private readonly Uniforms _u;
+    private readonly GpuProgram _builtin;
+
+    // Programs built from caller-supplied GLSL, kept against the Shader object by reference exactly
+    // as meshes are kept against the Mesh. A null value is a shader that would not build: remembering
+    // the failure is what stops a broken material being recompiled sixty times a second, and what
+    // makes the report a fact about that shader rather than about the last frame.
+    private readonly Dictionary<Shader, GpuProgram?> _programs = new(ReferenceEqualityComparer.Instance as IEqualityComparer<Shader> ?? EqualityComparer<Shader>.Default);
+    private readonly Dictionary<Shader, ShaderReport> _reports = new(ReferenceEqualityComparer.Instance as IEqualityComparer<Shader> ?? EqualityComparer<Shader>.Default);
+
     private readonly Dictionary<Mesh, GpuMesh> _meshes = new(ReferenceEqualityComparer.Instance as IEqualityComparer<Mesh> ?? EqualityComparer<Mesh>.Default);
     private readonly Dictionary<TextureRef, uint> _textures = [];
     private uint _whiteTexture;
+
+    // Counts Draw calls, so the per-frame uniforms are set on each program the first time that frame
+    // reaches it and not once per draw. A scene with one custom shader and four hundred nodes sets
+    // the camera and the lights twice.
+    private long _frame;
     private bool _disposed;
 
-    private GlRenderer(GlApi gl, uint program, Uniforms uniforms)
+    private GlRenderer(GlApi gl, GpuProgram builtin)
     {
         _gl = gl;
-        _program = program;
-        _u = uniforms;
+        _builtin = builtin;
     }
 
     /// <summary>What the driver calls itself. Worth logging: it names the hardware, and it is the
@@ -69,22 +80,36 @@ public sealed unsafe class GlRenderer : IDisposable
             return null;
         }
 
-        var vertex = Compile(gl, GlApi.VERTEX_SHADER, ShaderSource.Vertex(gl.Dialect), out var vertexError);
-        if (vertex == 0) { error = "vertex shader: " + vertexError; return null; }
+        var program = Build(gl, ShaderSource.Vertex(gl.Dialect), ShaderSource.Fragment(gl.Dialect), out var built);
+        if (program == 0) { error = built; return null; }
 
-        var fragment = Compile(gl, GlApi.FRAGMENT_SHADER, ShaderSource.Fragment(gl.Dialect), out var fragmentError);
-        if (fragment == 0) { gl.DeleteShader(vertex); error = "fragment shader: " + fragmentError; return null; }
+        return new GlRenderer(gl, new GpuProgram(gl, program));
+    }
+
+    /// <summary>
+    /// Compile and link one program from finished source, or say why not.
+    ///
+    /// <para>The engine's own program and a caller's go through here identically, which is the point:
+    /// a custom shader gets the same attribute bindings, the same log handling and the same refusal
+    /// to throw. Returns 0 and sets <paramref name="error"/> on failure.</para>
+    /// </summary>
+    private static uint Build(GlApi gl, string vertexSource, string fragmentSource, out string? error)
+    {
+        var vertex = Compile(gl, GlApi.VERTEX_SHADER, vertexSource, out var vertexError);
+        if (vertex == 0) { error = "vertex shader: " + vertexError; return 0; }
+
+        var fragment = Compile(gl, GlApi.FRAGMENT_SHADER, fragmentSource, out var fragmentError);
+        if (fragment == 0) { gl.DeleteShader(vertex); error = "fragment shader: " + fragmentError; return 0; }
 
         var program = gl.CreateProgram();
         gl.AttachShader(program, vertex);
         gl.AttachShader(program, fragment);
         // Bound before linking rather than queried after: the locations are then a fact of this
         // source rather than something the driver chose, so a mesh missing a channel just leaves that
-        // slot disabled and no lookup can disagree.
-        BindAttribute(gl, program, ShaderSource.AttrPosition, "aPos");
-        BindAttribute(gl, program, ShaderSource.AttrNormal, "aNormal");
-        BindAttribute(gl, program, ShaderSource.AttrUv, "aUv");
-        BindAttribute(gl, program, ShaderSource.AttrColor, "aColor");
+        // slot disabled and no lookup can disagree. Every attribute is bound, including aTangent —
+        // leaving one to the linker means it lands where that driver felt like putting it, which is
+        // location 4 on most of them and a silently wrong normal map on the rest.
+        foreach (var (location, name) in ShaderSource.Attributes) BindAttribute(gl, program, location, name);
         gl.LinkProgram(program);
 
         gl.DeleteShader(vertex);
@@ -98,10 +123,11 @@ public sealed unsafe class GlRenderer : IDisposable
             gl.GetProgramInfoLog(program, 2048, null, log);
             gl.DeleteProgram(program);
             error = "link: " + System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)log);
-            return null;
+            return 0;
         }
 
-        return new GlRenderer(gl, program, new Uniforms(gl, program));
+        error = null;
+        return program;
     }
 
     /// <summary>
@@ -132,31 +158,11 @@ public sealed unsafe class GlRenderer : IDisposable
             gl.Clear(GlApi.COLOR_BUFFER_BIT | GlApi.DEPTH_BUFFER_BIT);
         }
 
-        gl.UseProgram(_program);
-
+        // Which program each draw uses is now a property of its material, so the camera, the lights
+        // and the debug switches are pushed to a program the first time this frame reaches it rather
+        // than once here. A scene with no custom shaders in it does that exactly once, as before.
+        _frame++;
         var viewProjection = camera.ViewProjection((float)width / height);
-        SetVector3(_u.CamPos, camera.Position);
-        SetVector3(_u.LightDir, Normalise(settings.LightDirection, new Vector3(0, -1, 0)));
-        SetVector3(_u.LightColor, settings.LightColor);
-
-        var environment = settings.Environment;
-        var intensity = MathF.Max(environment.Intensity, 0f);
-        SetVector3(_u.SkyColor, environment.Sky * intensity);
-        SetVector3(_u.HorizonColor, environment.Horizon * intensity);
-        SetVector3(_u.GroundColor, environment.Ground * intensity);
-        SetVector3(_u.UpAxis, settings.Up == Khalkos3D.UpAxis.Z ? Vector3.UnitZ : Vector3.UnitY);
-        gl.Uniform1i(_u.ShowNormals, settings.ShowNormals ? 1 : 0);
-        gl.Uniform1i(_u.HighlightBackfaces, settings.HighlightBackfaces ? 1 : 0);
-        SetVector3(_u.BackfaceColor, settings.BackfaceColor);
-
-        gl.Uniform1i(_u.SectionActive, settings.Section is not null ? 1 : 0);
-        if (settings.Section is { } plane && _u.SectionPlane >= 0)
-            gl.Uniform4f(_u.SectionPlane, plane.Normal.X, plane.Normal.Y, plane.Normal.Z, plane.D);
-        SetVector3(_u.SectionColor, settings.SectionColor);
-        // Fixed units: base colour on 0, normal map on 1. Set once per frame rather than per draw,
-        // since the sampler-to-unit mapping never changes.
-        gl.Uniform1i(_u.Tex, 0);
-        gl.Uniform1i(_u.NormalTex, 1);
 
         // Opaque first, then transparent back to front. Sorting only the transparent half is the
         // whole reason AlphaMode exists as a distinction: sorting everything would cost a pass over
@@ -172,7 +178,7 @@ public sealed unsafe class GlRenderer : IDisposable
                 continue;
             }
             DrawOne(mesh, world, material, TextureFor(scene, material),
-                    NormalMapFor(scene, material), viewProjection, settings);
+                    NormalMapFor(scene, material), viewProjection, camera, settings);
         }
 
         if (transparent is null) return;
@@ -185,49 +191,70 @@ public sealed unsafe class GlRenderer : IDisposable
         gl.DepthMask(0);
         foreach (var (mesh, world, material, _) in transparent)
             DrawOne(mesh, world, material, TextureFor(scene, material),
-                    NormalMapFor(scene, material), viewProjection, settings);
+                    NormalMapFor(scene, material), viewProjection, camera, settings);
         gl.DepthMask(1);
         gl.Disable(GlApi.BLEND);
     }
 
     private void DrawOne(Mesh mesh, Matrix4x4 world, Material material, uint texture, uint normalMap,
-                         Matrix4x4 viewProjection, RenderSettings settings)
+                         Matrix4x4 viewProjection, in Camera camera, RenderSettings settings)
     {
         var gl = _gl;
         var gpu = Upload(mesh);
         if (gpu.Indices == 0) return;
 
+        // The material chooses the program: its own shader if it has one that builds, and the
+        // built-in metallic-roughness program otherwise. A shader that failed to compile draws as
+        // though it were not there, which keeps the geometry on screen while the report says why it
+        // is the wrong colour.
+        var program = ProgramFor(material);
+        var u = program.U;
+        gl.UseProgram(program.Handle);
+        if (program.Frame != _frame)
+        {
+            ApplyFrame(program, camera, settings);
+            program.Frame = _frame;
+        }
+
         var mvp = world * viewProjection;
-        SetMatrix(_u.Mvp, mvp);
-        SetMatrix(_u.Model, world);
+        SetMatrix(u.Mvp, mvp);
+        SetMatrix(u.Model, world);
 
         // The inverse transpose, which equals the model matrix only for a rigid motion. A node
         // carrying a non-uniform scale — a stretched copy on a plate — would otherwise have every
         // normal tilted, and the lighting would slide across the surface as it turned.
-        SetMatrix(_u.NormalMatrix,
+        SetMatrix(u.NormalMatrix,
             Matrix4x4.Invert(world, out var inverse) ? Matrix4x4.Transpose(inverse) : Matrix4x4.Identity);
 
         var colour = material.BaseColor;
-        gl.Uniform4f(_u.BaseColor, colour.X, colour.Y, colour.Z, colour.W);
-        gl.Uniform1f(_u.Metallic, material.Metallic);
-        gl.Uniform1f(_u.Roughness, material.Roughness);
-        SetVector3(_u.Emissive, material.Emissive);
-        gl.Uniform1f(_u.AlphaCutoff, material.AlphaCutoff);
-        gl.Uniform1i(_u.AlphaMode, material.Alpha switch
+        gl.Uniform4f(u.BaseColor, colour.X, colour.Y, colour.Z, colour.W);
+        gl.Uniform1f(u.Metallic, material.Metallic);
+        gl.Uniform1f(u.Roughness, material.Roughness);
+        SetVector3(u.Emissive, material.Emissive);
+        gl.Uniform1f(u.AlphaCutoff, material.AlphaCutoff);
+        gl.Uniform1i(u.AlphaMode, material.Alpha switch
         {
             AlphaMode.Mask => 1,
             AlphaMode.Blend => 2,
             _ => 0,
         });
-        gl.Uniform1i(_u.HasVertexColor, gpu.HasColor ? 1 : 0);
-        gl.Uniform1i(_u.Unlit, material.Unlit ? 1 : 0);
+        gl.Uniform1i(u.HasVertexColor, gpu.HasColor ? 1 : 0);
+        gl.Uniform1i(u.Unlit, material.Unlit ? 1 : 0);
+
+        // The caller's own uniforms last, so nothing above can overwrite one of them. A name this
+        // program does not declare resolves to -1 and is skipped: a driver is entitled to optimise an
+        // unused uniform out of existence, so its absence is not evidence of a mistake and must not
+        // be reported as one.
+        if (material.ShaderValues.Count > 0)
+            foreach (var (name, value) in material.ShaderValues)
+                SetValue(program.Location(gl, name), value);
 
         gl.ActiveTexture(GlApi.TEXTURE0);
         // Always bound, even with no texture: sampling a one-pixel white image costs nothing and
         // removes a shader permutation. An UNBOUND sampler is undefined behaviour on some drivers
         // and renders black on others, which is the worst kind of difference to debug remotely.
         gl.BindTexture(GlApi.TEXTURE_2D, texture != 0 ? texture : White());
-        gl.Uniform1i(_u.HasTex, texture != 0 ? 1 : 0);
+        gl.Uniform1i(u.HasTex, texture != 0 ? 1 : 0);
 
         // A normal map needs a tangent frame to be interpreted in. Without one the map would be
         // applied against an arbitrary basis and the lighting would swim as the model turns, so the
@@ -236,7 +263,7 @@ public sealed unsafe class GlRenderer : IDisposable
         var useNormalMap = normalMap != 0 && gpu.HasTangents;
         gl.ActiveTexture(GlApi.TEXTURE0 + 1);
         gl.BindTexture(GlApi.TEXTURE_2D, useNormalMap ? normalMap : White());
-        gl.Uniform1i(_u.HasNormalMap, useNormalMap ? 1 : 0);
+        gl.Uniform1i(u.HasNormalMap, useNormalMap ? 1 : 0);
         gl.ActiveTexture(GlApi.TEXTURE0);
 
         // Culling is skipped whenever a back face is something we want to SEE: a double-sided
@@ -284,6 +311,57 @@ public sealed unsafe class GlRenderer : IDisposable
         if (_disposed || !_meshes.Remove(mesh, out var gpu)) return;
         gpu.Delete(_gl);
     }
+
+    /// <summary>
+    /// Build a caller's shader now and say how it went, rather than finding out mid-frame.
+    ///
+    /// <para>Calling this is optional — a material carrying a shader compiles it the first time it is
+    /// drawn either way — and it is what an application with a shader editor in it wants, because the
+    /// report can then be put in front of the person who just typed the mistake. Idempotent: the
+    /// result is remembered against the shader, so this is also how to read the report of a shader
+    /// that has already been built.</para>
+    ///
+    /// <para>Must be called with the context current.</para>
+    /// </summary>
+    public ShaderReport Prepare(Shader shader)
+    {
+        ArgumentNullException.ThrowIfNull(shader);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_reports.TryGetValue(shader, out var known)) return known;
+
+        // THE TEXT IS JUDGED BEFORE THE DRIVER SEES IT, because the driver in front of us is the
+        // wrong judge of whether this compiles anywhere else. See ShaderCheck.
+        var inspection = ShaderCheck.Inspect(shader);
+        var notes = inspection.Notes;
+        if (!inspection.Ok)
+            return Remember(shader, null, new ShaderReport(false, Describe(shader, inspection.Error), notes));
+
+        var dialect = _gl.Dialect;
+        var vertexSource = shader.Kind == ShaderKind.Program
+            ? ShaderSource.Whole(dialect, shader.Vertex!)
+            : ShaderSource.VertexWith(dialect, shader.Vertex);
+        var fragmentSource = shader.Kind == ShaderKind.Program
+            ? ShaderSource.Whole(dialect, shader.Fragment)
+            : ShaderSource.FragmentWith(dialect, shader.Fragment);
+
+        var handle = Build(_gl, vertexSource, fragmentSource, out var error);
+        return handle == 0
+            ? Remember(shader, null, new ShaderReport(false, Describe(shader, error), notes))
+            : Remember(shader, new GpuProgram(_gl, handle), new ShaderReport(true, null, notes));
+    }
+
+    /// <summary>Drop the compiled program for a shader — for an editor that has just changed its
+    /// text and wants the next draw to rebuild it. Must be called with the context current.</summary>
+    public void Forget(Shader shader)
+    {
+        ArgumentNullException.ThrowIfNull(shader);
+        if (_disposed) return;
+        if (_programs.Remove(shader, out var program) && program is not null) _gl.DeleteProgram(program.Handle);
+        _reports.Remove(shader);
+    }
+
+    /// <summary>Caller shaders that have been built, successfully or not.</summary>
+    public int CachedShaders => _reports.Count;
 
     /// <summary>Meshes currently held on the GPU.</summary>
     public int CachedMeshes => _meshes.Count;
@@ -478,6 +556,90 @@ public sealed unsafe class GlRenderer : IDisposable
 
     // ---- helpers ---------------------------------------------------------------------------
 
+    // ---- programs --------------------------------------------------------------------------
+
+    /// <summary>The program a material draws with: its own if it has one that built, ours if not.</summary>
+    private GpuProgram ProgramFor(Material material)
+    {
+        if (material.Shader is not { } shader) return _builtin;
+        if (_programs.TryGetValue(shader, out var cached)) return cached ?? _builtin;
+
+        Prepare(shader);
+        return _programs.TryGetValue(shader, out var built) && built is not null ? built : _builtin;
+    }
+
+    private ShaderReport Remember(Shader shader, GpuProgram? program, ShaderReport report)
+    {
+        _programs[shader] = program;
+        _reports[shader] = report;
+        return report;
+    }
+
+    private static string Describe(Shader shader, string? problem) =>
+        $"{shader.Name ?? "shader"}: {problem ?? "no reason given"}";
+
+    /// <summary>
+    /// Push everything that is true of the whole frame — where the camera is, what the light is
+    /// doing, which debug views are on — onto one program.
+    ///
+    /// <para>Per program rather than per frame, because uniforms belong to a program and not to the
+    /// context: a scene mixing the built-in shader with two custom ones needs this three times, and
+    /// the frame counter is what stops it happening once per draw.</para>
+    /// </summary>
+    private void ApplyFrame(GpuProgram program, in Camera camera, RenderSettings settings)
+    {
+        var gl = _gl;
+        var u = program.U;
+
+        SetVector3(u.CamPos, camera.Position);
+        SetVector3(u.LightDir, Normalise(settings.LightDirection, new Vector3(0, -1, 0)));
+        SetVector3(u.LightColor, settings.LightColor);
+
+        var environment = settings.Environment;
+        var intensity = MathF.Max(environment.Intensity, 0f);
+        SetVector3(u.SkyColor, environment.Sky * intensity);
+        SetVector3(u.HorizonColor, environment.Horizon * intensity);
+        SetVector3(u.GroundColor, environment.Ground * intensity);
+        SetVector3(u.UpAxis, settings.Up == Khalkos3D.UpAxis.Z ? Vector3.UnitZ : Vector3.UnitY);
+        gl.Uniform1i(u.ShowNormals, settings.ShowNormals ? 1 : 0);
+        gl.Uniform1i(u.HighlightBackfaces, settings.HighlightBackfaces ? 1 : 0);
+        SetVector3(u.BackfaceColor, settings.BackfaceColor);
+
+        gl.Uniform1i(u.SectionActive, settings.Section is not null ? 1 : 0);
+        if (settings.Section is { } plane && u.SectionPlane >= 0)
+            gl.Uniform4f(u.SectionPlane, plane.Normal.X, plane.Normal.Y, plane.Normal.Z, plane.D);
+        SetVector3(u.SectionColor, settings.SectionColor);
+
+        // Fixed units: base colour on 0, normal map on 1. The mapping never changes, so it is set
+        // when a frame first reaches a program rather than per draw.
+        gl.Uniform1i(u.Tex, 0);
+        gl.Uniform1i(u.NormalTex, 1);
+    }
+
+    /// <summary>
+    /// Set one caller-supplied value, choosing the call from the value's own type.
+    ///
+    /// <para>The kind is carried rather than inferred because GL does not object to the wrong one: a
+    /// vec3 set with <c>glUniform4f</c> leaves the old value in place and returns quietly, so the
+    /// mistake shows up as a shader that works where it was written and not elsewhere.</para>
+    /// </summary>
+    private void SetValue(int location, ShaderValue value)
+    {
+        if (location < 0) return;
+
+        var gl = _gl;
+        var v = value.Vector;
+        switch (value.Kind)
+        {
+            case ShaderValueKind.Float: gl.Uniform1f(location, value.Scalar); break;
+            case ShaderValueKind.Int: gl.Uniform1i(location, (int)value.Scalar); break;
+            case ShaderValueKind.Vector2: gl.Uniform2f(location, v.X, v.Y); break;
+            case ShaderValueKind.Vector3: gl.Uniform3f(location, v.X, v.Y, v.Z); break;
+            case ShaderValueKind.Vector4: gl.Uniform4f(location, v.X, v.Y, v.Z, v.W); break;
+            case ShaderValueKind.Matrix: SetMatrix(location, value.Matrix); break;
+        }
+    }
+
     private static Vector3 Normalise(Vector3 value, Vector3 fallback)
     {
         var length = value.Length();
@@ -528,6 +690,33 @@ public sealed unsafe class GlRenderer : IDisposable
     {
         var bytes = Encoding.UTF8.GetBytes(name + "\0");
         fixed (byte* p = bytes) gl.BindAttribLocation(program, location, p);
+    }
+
+    /// <summary>
+    /// One linked program: the engine's, or one built from a caller's <see cref="Shader"/>.
+    /// </summary>
+    private sealed class GpuProgram(GlApi gl, uint handle)
+    {
+        internal readonly uint Handle = handle;
+        internal readonly Uniforms U = new(gl, handle);
+
+        /// <summary>The last frame whose shared uniforms were pushed to this program.</summary>
+        internal long Frame = -1;
+
+        // Caller uniform locations, looked up once each. glGetUniformLocation is a string lookup
+        // inside the driver, and the answer cannot change while the program lives.
+        private readonly Dictionary<string, int> _custom = [];
+
+        internal int Location(GlApi api, string name)
+        {
+            if (_custom.TryGetValue(name, out var known)) return known;
+
+            var bytes = Encoding.UTF8.GetBytes(name + "\0");
+            int location;
+            fixed (byte* p = bytes) location = api.GetUniformLocation(Handle, p);
+            _custom[name] = location;
+            return location;
+        }
     }
 
     /// <summary>Uniform locations, resolved once. A location of -1 means the driver optimised the
@@ -613,6 +802,10 @@ public sealed unsafe class GlRenderer : IDisposable
 
         if (_whiteTexture != 0) { var t = _whiteTexture; _gl.DeleteTextures(1, &t); _whiteTexture = 0; }
         _gl.UseProgram(0);
-        _gl.DeleteProgram(_program);
+
+        foreach (var program in _programs.Values) if (program is not null) _gl.DeleteProgram(program.Handle);
+        _programs.Clear();
+        _reports.Clear();
+        _gl.DeleteProgram(_builtin.Handle);
     }
 }

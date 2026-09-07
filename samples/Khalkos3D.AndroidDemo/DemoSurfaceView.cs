@@ -136,6 +136,11 @@ internal sealed class DemoSurfaceView : GLSurfaceView
             viewer.Show(DemoScene.Showcase());
             Log.Info(LogTag, $"ready {viewer.Driver}");
             Log.Info(LogTag, $"triangles {viewer.TriangleCount}");
+
+            // The sample's shader compiles here or it does not, and this is the only place a phone
+            // will say so. The GLES compiler is a different compiler from the desktop's, which is the
+            // whole reason the demo carries a shader at all.
+            foreach (var note in viewer.ShaderNotes) Log.Info(LogTag, $"shader {note}");
         }
 
         public void OnSurfaceChanged(IGL10? gl, int width, int height) => viewer.Resize(width, height);

@@ -31,6 +31,40 @@ public static class DemoScene
     private const float LogoFacing = MathF.PI / 2f - 0.6f;
 
     /// <summary>
+    /// A shader the sample supplies, on the orbiting cubes: bands of light sliding along them.
+    ///
+    /// <para><b>Here to prove the claim, not to decorate.</b> This is a
+    /// <see cref="ShaderKind.Surface"/> shader, so it contains no version directive, no varyings and
+    /// no lighting — which is why the same few lines compile on desktop GL 3.3, on the phone's
+    /// GLES 3.0 and in a browser's WebGL2, and why the cubes still answer W, N and B like everything
+    /// else on screen.</para>
+    ///
+    /// <para><b>Built once, held forever.</b> The renderer compiles a program against this object's
+    /// identity, so a static field is one compile for the life of the process. Rebuilding an
+    /// identical shader every frame would be a compile every frame, which is the one way to make this
+    /// feature expensive.</para>
+    /// </summary>
+    private static readonly Shader Bands = Shader.Surface("""
+        uniform float uTime;
+        uniform vec3  uGlow;
+
+        void surface(inout Surface s) {
+            // Bands climbing the world's up axis and sliding with the clock. World space rather than
+            // object space on purpose: the cubes spin, and a pattern locked to the cube would turn
+            // with it and read as paint rather than as something moving through it.
+            float wave = sin((s.world.y - uTime * 0.55) * 17.0);
+            // Narrow, so they read as bands crossing the cube rather than as a lighter half of it.
+            float band = smoothstep(0.55, 0.97, wave);
+
+            s.baseColor.rgb = mix(s.baseColor.rgb, uGlow, band * 0.55);
+            s.roughness = mix(s.roughness, 0.12, band);
+            // Emissive, so a band is light rather than a lighter colour: it stays bright on the face
+            // pointing away from the lamp, which is what tells a viewer it is not merely shading.
+            s.emissive = uGlow * band * 0.75;
+        }
+        """, name: "bands");
+
+    /// <summary>
     /// The Khalkos3D logo, turning, with metal spheres and dielectric cubes in orbit around it.
     ///
     /// <para><b>Chosen because it fails visibly.</b> A single static object looks correct under
@@ -108,21 +142,14 @@ public static class DemoScene
 
         // The outer ring: plastic, counter-turning, higher up, and cubes — a sphere spinning on its
         // own axis is invisible however correct it is, so the visible half of "rotating" is carried
-        // by something with corners.
+        // by something with corners. These are the ones carrying the sample's own shader.
         const int cubes = 4;
+        var firstCube = materials.Count;
         for (var i = 0; i < cubes; i++)
         {
-            var roughness = 0.12f + i * (0.66f / (cubes - 1));
-            materials.Add(new Material
-            {
-                Name = $"plastic-{roughness:0.00}",
-                BaseColor = new Vector4(0.20f, 0.45f, 0.85f, 1f),
-                Roughness = roughness,
-            });
-
             orbiters.Add(new Orbiter(
                 Mesh: 2,
-                Material: materials.Count - 1,
+                Material: firstCube + i,
                 Radius: 3.3f,
                 Height: 2.15f,
                 Phase: MathF.Tau * i / cubes,
@@ -131,10 +158,35 @@ public static class DemoScene
                 Bob: 0.30f));
         }
 
+        // The cubes' materials are rebuilt every frame, because one of their shader's uniforms is the
+        // clock. Everything ahead of them in the list is fixed and the order never changes — the
+        // orbiters above hold indices into it.
+        IReadOnlyList<Material> Dress(float seconds)
+        {
+            var all = new List<Material>(materials);
+            for (var i = 0; i < cubes; i++)
+            {
+                var roughness = 0.12f + i * (0.66f / (cubes - 1));
+                all.Add(new Material
+                {
+                    Name = $"plastic-{roughness:0.00}",
+                    BaseColor = new Vector4(0.20f, 0.45f, 0.85f, 1f),
+                    Roughness = roughness,
+                    Shader = Bands,
+                    ShaderValues = new Dictionary<string, ShaderValue>
+                    {
+                        ["uTime"] = seconds + i * 0.7f,   // offset, so the four are not one animation
+                        ["uGlow"] = new Vector3(0.95f, 0.55f, 0.25f),
+                    },
+                });
+            }
+            return all;
+        }
+
         var parts = new Scene
         {
             Meshes = meshes,
-            Materials = materials,
+            Materials = Dress(0f),
             // The loader's notes are carried through, so a host that prints them prints the truth
             // about this file rather than an empty list for a scene that did in fact load one.
             Report = logo.Report,
@@ -156,7 +208,7 @@ public static class DemoScene
 
             foreach (var orbiter in orbiters) nodes.Add(orbiter.At(seconds));
             return nodes;
-        });
+        }, Dress);
     }
 
     /// <summary>

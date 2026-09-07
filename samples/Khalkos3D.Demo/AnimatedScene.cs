@@ -18,11 +18,14 @@ public sealed class AnimatedScene
 {
     private readonly Scene _parts;
     private readonly Func<float, IReadOnlyList<Node>> _arrange;
+    private readonly Func<float, IReadOnlyList<Material>>? _dress;
 
-    private AnimatedScene(Scene parts, Func<float, IReadOnlyList<Node>> arrange, bool moves, BoundingBox? focus = null)
+    private AnimatedScene(Scene parts, Func<float, IReadOnlyList<Node>> arrange,
+                          Func<float, IReadOnlyList<Material>>? dress, bool moves, BoundingBox? focus = null)
     {
         _parts = parts;
         _arrange = arrange;
+        _dress = dress;
         Moves = moves;
         // Framed at the start of the animation rather than continuously: a camera that reframed
         // itself as the orbiters swung about would drift for as long as the demo is left running.
@@ -33,18 +36,27 @@ public sealed class AnimatedScene
     /// A scene that moves. <paramref name="parts"/> supplies the meshes, materials and metadata,
     /// and <paramref name="arrange"/> places them for a time in seconds since the scene appeared.
     /// </summary>
-    public static AnimatedScene Moving(Scene parts, Func<float, IReadOnlyList<Node>> arrange)
+    /// <param name="parts">Meshes, materials and metadata. The MESHES are what must stay fixed — they
+    /// are what the renderer caches — so this is the half that never changes.</param>
+    /// <param name="arrange">Where everything is at a given moment.</param>
+    /// <param name="dress">Optional: the materials at a given moment, for a scene whose surfaces
+    /// change rather than only its positions — a shader uniform carrying the time, most obviously.
+    /// It must return the same materials in the same order, because the nodes address them by index;
+    /// what may change is what each one says. Materials are not cached on the GPU, so rebuilding them
+    /// per frame costs an allocation and nothing else.</param>
+    public static AnimatedScene Moving(Scene parts, Func<float, IReadOnlyList<Node>> arrange,
+                                       Func<float, IReadOnlyList<Material>>? dress = null)
     {
         ArgumentNullException.ThrowIfNull(parts);
         ArgumentNullException.ThrowIfNull(arrange);
-        return new AnimatedScene(parts, arrange, moves: true);
+        return new AnimatedScene(parts, arrange, dress, moves: true);
     }
 
     /// <summary>A scene that does not move — a model as its file laid it out.</summary>
     public static AnimatedScene Still(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        return new AnimatedScene(scene, _ => scene.Roots, moves: false, scene.Bounds);
+        return new AnimatedScene(scene, _ => scene.Roots, dress: null, moves: false, scene.Bounds);
     }
 
     /// <summary>Whether <see cref="At"/> is worth calling more than once.</summary>
@@ -63,7 +75,7 @@ public sealed class AnimatedScene
     public Scene At(float seconds) => new()
     {
         Meshes = _parts.Meshes,
-        Materials = _parts.Materials,
+        Materials = _dress is null ? _parts.Materials : _dress(seconds),
         Images = _parts.Images,
         Textures = _parts.Textures,
         Roots = _arrange(seconds),
@@ -104,9 +116,13 @@ public sealed class AnimatedScene
         };
 
         var arrange = _arrange;
+        var dress = _dress;
         return new AnimatedScene(
             parts,
             seconds => [.. arrange(seconds), gridNode, axesNode],
+            // The line material has to be appended per frame as well when the materials are rebuilt
+            // per frame, or the index the two ground nodes hold would point past the end of the list.
+            dress is null ? null : seconds => [.. dress(seconds), Shapes.LineMaterial],
             Moves,
             Focus);
     }

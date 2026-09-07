@@ -88,6 +88,38 @@ public sealed class Material
     /// </summary>
     public bool Unlit { get; init; }
 
+    /// <summary>
+    /// GLSL the application supplies for this surface, or null for the built-in metallic-roughness
+    /// program that every material has always had.
+    ///
+    /// <para>Held by reference and compiled once per object, so this field wants a shader built at
+    /// startup and shared — see <see cref="Khalkos3D.Shader"/>. Two hundred materials pointing at one
+    /// <see cref="Khalkos3D.Shader"/> are one program; two hundred equivalent shader objects are two
+    /// hundred compiles.</para>
+    ///
+    /// <para>A renderer that cannot compile it says so and draws this material with the built-in
+    /// program instead. That is the honest failure for a viewer: the geometry a user asked to see is
+    /// still on screen, and the reason it is the wrong colour is in a report rather than in a blank
+    /// window.</para>
+    /// </summary>
+    public Shader? Shader { get; init; }
+
+    /// <summary>
+    /// Values for the uniforms <see cref="Shader"/> declares, by name.
+    ///
+    /// <para>Per material rather than per shader, because the shader is the code and this is the
+    /// dressing: one wood shader, forty materials that differ by a grain scale. A name the program
+    /// does not declare is skipped rather than treated as an error — a driver is entitled to optimise
+    /// an unused uniform out of existence, so its absence says nothing about whether the caller made
+    /// a mistake.</para>
+    ///
+    /// <para>Materials are cheap objects the renderer never caches, so a value that changes every
+    /// frame is a new material per frame and costs nothing on the GPU. It is the <see cref="Shader"/>
+    /// that must be kept, not the material holding it.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, ShaderValue> ShaderValues { get; init; } =
+        System.Collections.ObjectModel.ReadOnlyDictionary<string, ShaderValue>.Empty;
+
     /// <summary>True when this material needs to be drawn after the opaque pass.</summary>
     public bool IsTransparent => Alpha == AlphaMode.Blend || BaseColor.W < 1f;
 }

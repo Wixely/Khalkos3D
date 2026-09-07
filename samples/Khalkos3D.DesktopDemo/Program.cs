@@ -74,8 +74,9 @@ window.Load += () =>
     Console.WriteLine($"triangles  {viewer.TriangleCount:N0} (model and ground)");
 
     // The report is printed whether or not anything went wrong. A loader that only speaks up on
-    // failure trains people not to read it.
+    // failure trains people not to read it, and the same goes for the shaders the scene carries.
     foreach (var note in model.Report.Notes) Console.WriteLine($"note       {note}");
+    foreach (var note in viewer.ShaderNotes) Console.WriteLine($"shader     {note}");
 
     Console.WriteLine();
     Console.WriteLine("drag to orbit, right-drag or shift-drag to pan, wheel to zoom");

@@ -251,7 +251,54 @@ defaults to on, and records the deviation in the load report — a considered ch
 ignoring the file. That is a bug found by opening one real file that a hundred hand-written fixtures
 would not have found, which is the argument for the file being there.
 
-### M5 · Animation — **reassess before starting**
+### M5 · Shaders the caller writes — **done**
+
+An integrating application can supply its own GLSL, and it runs on every target this engine claims.
+
+**Two layers over one mechanism, and the small one is the default.** A `Shader.Surface` is a fragment
+function — `void surface(inout Surface s)`, optionally `void vertex(inout Vertex v)` — spliced into
+the engine's program, which keeps the version directive, the attributes, the varyings, the lighting,
+the tone mapping, the debug views, the section plane and the alpha handling. A `Shader.Program` is
+both stages written by the caller, given nothing but the version line and the attribute bindings.
+
+**The surface layer is where the portability claim survives contact with users.** Everything that
+differs between GL 3.3 core, GLES 3.0 and WebGL2 is in the parts a surface shader does not contain,
+so the same snippet compiles on all six targets and the wireframe, normals and back-face views keep
+working over it. The whole-program layer hands that guarantee back deliberately: it is the escape
+hatch, and it is documented as one.
+
+**Which brings up the thing worth recording.** The obvious way to ship this is to compile whatever
+the caller wrote and let the driver object — and that is wrong here, because the driver in front of a
+developer is a desktop GL compiler that accepts `texture2D`, `varying` and `gl_FragColor` under its
+compatibility rules while ES 3.0 rejects all three. Source like that compiles clean on the machine it
+was written on and fails on a phone months later, which is precisely the failure this project exists
+to prevent. So `ShaderCheck` reads the text first and refuses what cannot be right everywhere; it is
+public and needs no GL context, so a consumer can run it in a headless CI job of their own. Notes are
+the other severity — desktop-only constructs are compiled and reported rather than refused, because
+the caller may know their deployment better than a list does.
+
+Three smaller decisions:
+
+- **A shader that fails to build draws with the built-in program**, and the reason goes in a
+  `ShaderReport` the host can print. A viewer that dies because a material would not compile has
+  turned an editing mistake into a crash.
+- **Programs are cached against the `Shader` object by reference**, exactly as meshes are cached
+  against the `Mesh`. Build one and hold it; an equivalent instance per frame is a compile per frame.
+- **Frame uniforms are pushed per program, not per frame.** Uniforms belong to a program, so a scene
+  mixing the built-in shader with two custom ones sets the camera three times — and the frame counter
+  is what stops it happening once per draw.
+
+Not here, and named rather than left as a surprise: **samplers of the caller's own**. A surface
+shader reaches the material's base-colour texture and normal map, which are already bound, and cannot
+yet bind a third image of its own. That needs texture-unit management the material model does not
+currently express, and it is the first thing to add if anyone asks for it.
+
+Found while building it: **`aTangent` was never bound to its attribute location**, and worked only
+because the linker happened to assign the one location left over. A caller's whole program declaring
+its attributes in another order would have got a silently wrong normal map — the exact class of
+defect that only appears on somebody else's driver.
+
+### M6 · Animation — **reassess before starting**
 
 Node animation and skinning. This is the point where the commitment changes shape: months rather than
 weeks, and the first thing that makes this feel like an engine rather than a viewer. It should be a
@@ -339,7 +386,8 @@ neither is a dependency of this repository: they are what a *caller* plugs into 
 | M2 viewer essentials | ~1 week |
 | M3 diagnostics and sectioning | 1–2 weeks |
 | M4 textures and environment | ~1 week |
-| M5 animation | months — reassess first |
+| M5 shaders the caller writes | ~1 week |
+| M6 animation | months — reassess first |
 
 **The estimate least worth trusting is M1, and not for the reason it looks.** The renderer itself is
 a known quantity. What is not is the verification: a headless GL context on CI, driver differences

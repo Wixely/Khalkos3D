@@ -90,6 +90,7 @@ public sealed unsafe class GlApi
     internal delegate* unmanaged<int, int, byte, float*, void> UniformMatrix4fv;
     internal delegate* unmanaged<int, float, float, float, float, void> Uniform4f;
     internal delegate* unmanaged<int, float, float, float, void> Uniform3f;
+    internal delegate* unmanaged<int, float, float, void> Uniform2f;
     internal delegate* unmanaged<int, float, void> Uniform1f;
     internal delegate* unmanaged<int, int, void> Uniform1i;
 
@@ -204,6 +205,7 @@ public sealed unsafe class GlApi
         gl.UniformMatrix4fv = (delegate* unmanaged<int, int, byte, float*, void>)P("glUniformMatrix4fv");
         gl.Uniform4f = (delegate* unmanaged<int, float, float, float, float, void>)P("glUniform4f");
         gl.Uniform3f = (delegate* unmanaged<int, float, float, float, void>)P("glUniform3f");
+        gl.Uniform2f = (delegate* unmanaged<int, float, float, void>)P("glUniform2f");
         gl.Uniform1f = (delegate* unmanaged<int, float, void>)P("glUniform1f");
         gl.Uniform1i = (delegate* unmanaged<int, int, void>)P("glUniform1i");
 

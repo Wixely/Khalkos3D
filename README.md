@@ -35,7 +35,7 @@ entire world to get it.
 |---|---|
 | **`Khalkos3D.Core`** | `Mesh`, `Material`, `Scene`, `BoundingBox`, `Camera`, and the vertex welder |
 | **`Khalkos3D.Formats`** | STL, OBJ, 3MF and glTF 2.0 / GLB, all producing the same `Scene` |
-| **`Khalkos3D.Gl`** | draws it — desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source |
+| **`Khalkos3D.Gl`** | draws it — desktop GL 3.3, OpenGL ES 3.0 and WebGL2 from one shader source, yours or its own |
 
 **All three have zero dependencies.** Nothing outside the BCL, so the asset layer compiles for every
 target including WebAssembly — where a native parser would mean a per-platform build matrix for what
@@ -99,6 +99,59 @@ with nothing to reflect it correctly renders near-black and every user reads tha
 
 The environment is a sky/horizon/ground gradient rather than an image: no HDR decoder, no
 precomputation, no asset to ship, no per-platform texture format, and identical on all six targets.
+
+### You can write the shader
+
+Materials are metallic-roughness PBR out of the box. When that is not the surface you wanted, hand the
+engine GLSL of your own — and it still runs on all six targets, because the parts that differ between
+them are the parts you do not write.
+
+```csharp
+// A surface shader: your function, the engine's program around it.
+var bands = Shader.Surface("""
+    uniform float uTime;
+    uniform vec3  uGlow;
+
+    void surface(inout Surface s) {
+        float band = smoothstep(0.55, 0.97, sin((s.world.y - uTime * 0.55) * 17.0));
+        s.baseColor.rgb = mix(s.baseColor.rgb, uGlow, band * 0.55);
+        s.emissive = uGlow * band * 0.75;
+    }
+    """, name: "bands");
+
+var material = new Material
+{
+    BaseColor = new Vector4(0.20f, 0.45f, 0.85f, 1f),
+    Shader = bands,
+    ShaderValues = new Dictionary<string, ShaderValue> { ["uTime"] = seconds, ["uGlow"] = glow },
+};
+```
+
+No `#version`, no `in`/`out`, no lighting, no tone mapping: `Surface` arrives with the material
+already resolved — base colour with its texture and vertex colour applied, the world normal with its
+normal map applied — and whatever you leave in it gets lit. **W**, **N** and **B** keep working over
+your material, because the debug views are in the program you did not have to write.
+
+When you want the whole thing instead, `Shader.Program(vertex, fragment)` gives you both stages; the
+engine contributes the version line and the attribute bindings and nothing else. That is the escape
+hatch, and it hands back the portability guarantee on purpose.
+
+**The driver in front of you is the wrong judge of whether your shader is portable.** A desktop GL
+compiler takes `texture2D`, `varying` and `gl_FragColor` under its compatibility rules; ES 3.0 and
+WebGL2 reject all three, so source like that works on the machine it was written on and fails on a
+phone months later. `ShaderCheck.Inspect` reads the text and refuses what cannot be right everywhere —
+before any driver sees it, with no GL context needed, so your own CI can run it on a machine with no
+GPU. Desktop-only constructs are reported rather than refused, in notes you can print.
+
+```csharp
+var report = ShaderCheck.Inspect(bands);     // no context, no GPU, no window
+if (!report.Ok) Console.Error.WriteLine(report.Error);
+foreach (var note in report.Notes) Console.WriteLine(note);
+```
+
+A shader that will not build draws with the built-in program and says why, rather than taking the
+frame with it — `GlRenderer.Prepare(shader)` returns the same report whenever you want it. Programs
+are compiled once and cached against the `Shader` object by reference, so build one and hold it.
 
 ```csharp
 // Every format, one type, and the caller never learns which parser ran.
@@ -168,6 +221,12 @@ from the time, and the meshes handed over are the same objects each time — so 
 are cached by reference and nothing is re-uploaded. That is why an engine with no animation system,
 no scene-graph mutation and no update loop can still show something moving, and why the hosts gained
 not one line for it: `DemoViewer` keeps the clock.
+
+**The bands crossing the cubes are a shader the sample supplies**, and they are there to be checked
+rather than admired: the desktop app prints whether it compiled and the Android app logs it, so the
+same seven lines are known to build on a desktop GL compiler and on a phone's GLES one — which are
+different compilers, and the reason "it runs everywhere" is a claim worth testing rather than
+asserting.
 
 ### Where the code lives, which is the point
 
