@@ -217,6 +217,13 @@ result but a wrong one.
 
 A standalone viewer for Windows, Linux, macOS and Android.
 
+<p align="center">
+  <img src=".github/assets/demo.png" alt="The Khalkos3D demo: a brushed copper logo, glowing hot cubes orbiting it, metal spheres below the grid" width="820">
+</p>
+
+**Download it** from the [latest release](https://github.com/Wixely/Khalkos3D/releases/latest) —
+`khalkos3d-demo` for Windows and Linux, one file each, nothing to install. Or run it from source:
+
 ```
 dotnet run --project samples/Khalkos3D.DesktopDemo              # the built-in scene
 dotnet run --project samples/Khalkos3D.DesktopDemo -- model.glb # or any file it reads

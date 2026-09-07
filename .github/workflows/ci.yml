@@ -146,6 +146,79 @@ jobs:
             -p:RunAOTCompilation=true -p:WasmEnableLLVM=true
           echo "ok: the asset layer AOT-compiles for browser-wasm through LLVM"
 
+  desktop:
+    name: The demo comes out as an executable, for Windows and Linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            binary: khalkos3d-demo.exe
+            native: glfw3.dll
+          - os: ubuntu-latest
+            rid: linux-x64
+            binary: khalkos3d-demo
+            native: libglfw.so.3
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # SELF-CONTAINED, because the audience for a demo is someone deciding whether this renders on
+      # their machine, and asking them to install a runtime first is asking them not to bother.
+      # Compressed, which halves the download for a moment of startup.
+      #
+      # IncludeNativeLibrariesForSelfExtract IS DELIBERATELY OFF, and that is the whole lesson of this
+      # job. With it on, the managed code and the native glfw3 all go inside one executable, the build
+      # reports success, and the program dies on launch with "Couldn't find a suitable window
+      # platform (GlfwPlatform - not applicable)" — because Silk.NET resolves its natives from the
+      # directory beside the executable, which in a self-extracting bundle is not where they went.
+      # Leaving them loose costs two small files next to the binary and makes the download work.
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish samples/Khalkos3D.DesktopDemo -c Release -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=false \
+            -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=none \
+            -o out
+
+      # AN EXECUTABLE THAT BUILDS AND ONE THAT RUNS ARE DIFFERENT CLAIMS, and this job exists because
+      # the difference was found the hard way. Passing a path that does not exist makes the demo print
+      # its error and exit 1 without needing a window, which is a real start: the host process, the
+      # runtime, the bundle and the argument handling all had to work to get there.
+      - name: It starts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "--- out ---"
+          ls -l out
+          test -f "out/${{ matrix.binary }}" || { echo "::error::no ${{ matrix.binary }} was published"; exit 1; }
+          test -f "out/${{ matrix.native }}" \
+            || { echo "::error::${{ matrix.native }} is not beside the executable; it will not start"; exit 1; }
+
+          chmod +x "out/${{ matrix.binary }}" || true
+          set +e
+          output=$("./out/${{ matrix.binary }}" no-such-model.glb 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          test $code -eq 1 || { echo "::error::expected exit 1 for a missing file, got $code"; exit 1; }
+          echo "$output" | grep -q "no such file" \
+            || { echo "::error::the binary did not reach its own argument handling"; exit 1; }
+          echo "ok: the published executable starts and runs its own code"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khalkos3d-demo-${{ matrix.rid }}
+          path: out/
+          if-no-files-found: error
+
   androiddemo:
     name: The demo builds for Android, and comes out installable
     runs-on: ubuntu-latest

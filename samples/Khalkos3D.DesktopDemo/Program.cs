@@ -3,8 +3,10 @@ using Khalkos3D;
 using Khalkos3D.Demo;
 using Khalkos3D.DesktopDemo;
 using Silk.NET.Input;
+using Silk.NET.Input.Glfw;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Glfw;
 
 // The desktop host: a window, a mouse, a keyboard. Every decision about what a frame contains lives
 // in Khalkos3D.Demo and is shared with Android — this file is the platform tax.
@@ -15,6 +17,17 @@ if (modelPath is not null && !File.Exists(modelPath))
     Console.Error.WriteLine($"no such file: {modelPath}");
     return 1;
 }
+
+// NAMED RATHER THAN DISCOVERED. Silk.NET finds its backends by scanning assemblies, which works
+// under `dotnet run` and is the first thing a trimmed or ahead-of-time build takes away. Two lines
+// to say GLFW out loud, and this host stops depending on that scan.
+//
+// It is not what fixed the published build, and the distinction is worth keeping: that failed with
+// "GlfwPlatform - not applicable" — the platform was found and the NATIVE glfw3 beside it was not.
+// See the publish flags in .github/workflows/ci.yml, which keep the natives out of the bundle so
+// they land next to the executable where Silk.NET looks for them.
+GlfwWindowing.RegisterPlatform();
+GlfwInput.RegisterPlatform();
 
 // Still when it came from a file, turning when it is the built-in scene. The host does not branch
 // on which: DemoViewer takes one type and drives the clock itself.
