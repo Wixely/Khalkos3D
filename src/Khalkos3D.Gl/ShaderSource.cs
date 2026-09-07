@@ -91,6 +91,7 @@ internal static class ShaderSource
 
         out vec3 vNormal;
         out vec3 vWorld;
+        out vec3 vObject;
         out vec2 vUv;
         out vec4 vColor;
         out vec4 vTangent;
@@ -119,6 +120,10 @@ internal static class ShaderSource
 
             vec4 world = uModel * vec4(v.position, 1.0);
             vWorld = world.xyz;
+            // Object space as well as world space, because a procedural pattern belongs to the thing
+            // it is on: grain, brushing, wear and printed markings all stay put when the object
+            // moves, and anything keyed to world space would swim across the surface as it turned.
+            vObject = v.position;
             // The INVERSE TRANSPOSE, not the model matrix. They agree only while the transform is a
             // rigid motion; the moment a node carries a non-uniform scale — which an instanced,
             // stretched copy routinely does — using the model matrix tilts every normal and
@@ -135,6 +140,7 @@ internal static class ShaderSource
     private const string FragmentPrelude = """
         in vec3 vNormal;
         in vec3 vWorld;
+        in vec3 vObject;
         in vec2 vUv;
         in vec4 vColor;
         in vec4 vTangent;
@@ -184,6 +190,7 @@ internal static class ShaderSource
         // not have to reimplement the sampling to get there.
         struct Surface {
             vec3  world;        // world-space position
+            vec3  object;       // position in the model's own space, before its transform
             vec3  normal;       // world space, mapped, NOT yet flipped towards the viewer
             vec3  view;         // unit vector towards the camera
             vec2  uv;
@@ -204,6 +211,7 @@ internal static class ShaderSource
 
             Surface s;
             s.world = vWorld;
+            s.object = vObject;
             s.uv = vUv;
             s.vertexColor = vColor;
             s.view = normalize(uCamPos - vWorld);

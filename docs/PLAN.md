@@ -279,6 +279,10 @@ the caller may know their deployment better than a list does.
 
 Three smaller decisions:
 
+- **The surface hook is given object space as well as world space.** The demo's brushed copper is
+  what found that: a pattern keyed to where a thing happens to be swims across it as it turns, and
+  grain belongs to the metal. One varying, and the difference between a procedural material that
+  works on moving geometry and one that does not.
 - **A shader that fails to build draws with the built-in program**, and the reason goes in a
   `ShaderReport` the host can print. A viewer that dies because a material would not compile has
   turned an editing mistake into a crash.

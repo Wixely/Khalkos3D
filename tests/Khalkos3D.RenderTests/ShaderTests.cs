@@ -177,6 +177,45 @@ public class ShaderTests(GlFixture gl, ITestOutputHelper output)
         Assert.Equal(Centre(plain), Centre(shaded));
     }
 
+    [Fact]
+    public void The_surface_sees_object_space_as_well_as_world_space()
+    {
+        // Both boxes sit entirely on the positive side of the world's X, so a shader reading world
+        // space paints them wholly red. Reading OBJECT space, each is half green and half red about
+        // its own middle — which is the difference that lets a procedural pattern stay on a thing
+        // while it moves rather than sliding across it.
+        var split = Shader.Surface("""
+            void surface(inout Surface s) {
+                s.baseColor.rgb = s.object.x < 0.0 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+            }
+            """, name: "split");
+
+        var material = new Material { Shader = split, Unlit = true };
+        var mesh = MeshWelder.FromTriangleSoup(TestBox.Corners(new Vector3(1.6f)), out _);
+        var scene = new Scene
+        {
+            Meshes = [mesh],
+            Materials = [material],
+            Up = UpAxis.Z,
+            Roots =
+            [
+                new Node { Mesh = 0, Material = 0, Transform = Matrix4x4.CreateTranslation(1.4f, 0f, 0f) },
+                new Node { Mesh = 0, Material = 0, Transform = Matrix4x4.CreateTranslation(4.2f, 0f, 0f) },
+            ],
+        };
+
+        var frame = Render(scene);
+        int red = 0, green = 0;
+        for (var i = 0; i < frame.Length; i += 4)
+        {
+            if (frame[i] > 150 && frame[i + 1] < 80) red++;
+            else if (frame[i + 1] > 150 && frame[i] < 80) green++;
+        }
+
+        output.WriteLine($"{red} red, {green} green");
+        Assert.True(green > red * 0.3, $"object space should halve each box; world space would leave no green ({green} vs {red})");
+    }
+
     // ---- it fails safely ---------------------------------------------------------------------
 
     [Fact]

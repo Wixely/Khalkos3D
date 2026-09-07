@@ -129,7 +129,9 @@ var material = new Material
 
 No `#version`, no `in`/`out`, no lighting, no tone mapping: `Surface` arrives with the material
 already resolved — base colour with its texture and vertex colour applied, the world normal with its
-normal map applied — and whatever you leave in it gets lit. **W**, **N** and **B** keep working over
+normal map applied — and whatever you leave in it gets lit. It carries the position in **both** world
+and object space, because a procedural pattern belongs to the thing it is on: grain keyed to the room
+would swim across the surface as the model turned. **W**, **N** and **B** keep working over
 your material, because the debug views are in the program you did not have to write.
 
 When you want the whole thing instead, `Shader.Program(vertex, fragment)` gives you both stages; the

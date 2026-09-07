@@ -31,6 +31,80 @@ public static class DemoScene
     private const float LogoFacing = MathF.PI / 2f - 0.6f;
 
     /// <summary>
+    /// Brushed copper, for the logo: parallel streaks of grain, each catching the light at a
+    /// slightly different angle.
+    ///
+    /// <para><b>Keyed to OBJECT space, which is the whole reason <c>Surface.object</c> exists.</b>
+    /// The logo turns, and a pattern keyed to where it happens to be would swim across the metal as
+    /// it went round — grain belongs to the thing, not to the room.</para>
+    ///
+    /// <para><b>The tilt is what makes it read as brushed rather than as a texture.</b> A flat face
+    /// reflects one patch of the environment, so varying the colour alone gives stripes on a flat
+    /// sheet; nudging the normal across the brush is what a groove physically does, and it is what
+    /// makes the streaks light up as the logo turns past the lamp.</para>
+    /// </summary>
+    private static readonly Shader Brushed = Shader.Surface("""
+        uniform float uLanes;    // streaks per unit of the model's own height
+        uniform float uAlong;    // how quickly a streak varies along its length
+        uniform vec3  uCopper;
+
+        float grainAt(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+
+        void surface(inout Surface s) {
+            // A streak is a lane: constant along the brush and changing across it, which is what
+            // makes the grain directional rather than noise.
+            float lane = floor(s.object.y * uLanes);
+            float grain = mix(grainAt(lane), grainAt(lane * 2.7 + 5.1), 0.5);
+
+            // A slow variation ALONG the streak as well, so it is not a perfectly even line — real
+            // brushing wanders.
+            float along = 0.5 + 0.5 * sin(s.object.x * uAlong + lane * 11.0);
+            float streak = mix(grain, grain * along, 0.4);
+
+            s.metallic = 1.0;
+            s.baseColor.rgb = uCopper * (1.00 + 0.25 * streak);
+            s.roughness = clamp(0.14 + 0.30 * streak, 0.05, 1.0);
+            s.normal = normalize(s.normal + uUpAxis * (streak - 0.5) * 0.22);
+
+            // THE ANISOTROPIC SHEEN, and it is here rather than in the engine on purpose: a brushed
+            // highlight is stretched ALONG the grain, and the engine's BRDF is isotropic — it has one
+            // roughness and no notion of which way a surface was brushed. Adding a second, directional
+            // model to the engine for one material would be the wrong trade; putting it in the shader
+            // that wants it is exactly what this feature is for.
+            //
+            // It goes into emissive because that is the one channel a surface hook can put light
+            // into. On a face this flat it is also the only thing that reads as metal at all: the
+            // environment barely changes across a plane, so without it the grain is a pattern on a
+            // dull sheet.
+            vec3 L = normalize(-uLightDir);
+            vec3 H = normalize(L + s.view);
+
+            // The grooves FAN, and that detail is the whole effect. Tilting the normal alone leaves
+            // the brush direction untouched — cross(up, n + up*k) is cross(up, n) — so the sheen
+            // comes out identical across a flat face and reads as a brightness lift rather than as
+            // metal. Turning each lane's groove by a fraction of a degree is what makes some of them
+            // catch the light while their neighbours do not.
+            vec3 tangent = normalize(cross(uUpAxis, s.normal));  // along the streaks
+            vec3 across = cross(s.normal, tangent);
+            vec3 brush = normalize(tangent + across * (streak - 0.5) * 0.30);
+
+            float axis = dot(brush, H);
+            float sheen = pow(max(0.0, 1.0 - axis * axis), 90.0);
+
+            // Desaturated a little towards the light: a metal's highlight carries its own tint, but
+            // the brightest part of a real one is close to white and that is what stops this reading
+            // as a brown surface with orange stripes on it.
+            // Two lobes: a narrow one for the glints that pick out individual grooves, and a broad
+            // one that lifts the whole face the way a metal reads brighter than its surroundings.
+            // With only the narrow lobe the metal is dark between glints and looks like grained wood.
+            float broad = pow(max(0.0, 1.0 - axis * axis), 12.0);
+            vec3 gleam = mix(uCopper, vec3(1.0), 0.12);
+
+            s.emissive += gleam * uLightColor * (sheen * 0.55 + broad * 0.22) * (0.3 + 0.7 * streak);
+        }
+        """, name: "brushed copper");
+
+    /// <summary>
     /// A shader the sample supplies, on the orbiting cubes: bands of light sliding along them.
     ///
     /// <para><b>Here to prove the claim, not to decorate.</b> This is a
@@ -106,9 +180,26 @@ public static class DemoScene
         // one patch of a grey environment and no more, that renders as dusty pink and reads as
         // plastic. A sphere would show the whole environment across its surface and look right. So
         // the logo gets the brand's colour and the orbiting bodies below get the physical treatment.
+        //
+        // The brush is measured in the MODEL'S OWN UNITS, taken from its bounds: this file is in
+        // millimetres and hundreds of them tall, and a streak count means something in a scene where
+        // a size in units would mean nothing.
         var materials = new List<Material>
         {
-            new() { Name = "copper", BaseColor = new(0.78f, 0.36f, 0.18f, 1f), Metallic = 1f, Roughness = 0.28f },
+            new()
+            {
+                Name = "brushed copper",
+                BaseColor = new Vector4(0.78f, 0.36f, 0.18f, 1f),
+                Metallic = 1f,
+                Roughness = 0.28f,
+                Shader = Brushed,
+                ShaderValues = new Dictionary<string, ShaderValue>
+                {
+                    ["uLanes"] = 90f / bounds.Size.Y,   // about one streak per two pixels at demo size
+                    ["uAlong"] = MathF.Tau * 14f / bounds.Size.X,
+                    ["uCopper"] = new Vector3(0.98f, 0.50f, 0.28f),
+                },
+            },
         };
 
         var orbiters = new List<Orbiter>();
