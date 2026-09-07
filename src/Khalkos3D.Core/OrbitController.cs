@@ -55,25 +55,36 @@ public sealed class OrbitController
     }
 
     /// <summary>
-    /// The viewport changed shape. Re-fits only when the model would otherwise be cut off, so a
-    /// resize does not throw away a view the user has carefully set up.
+    /// The viewport changed shape. The view is kept: the same orbit, the same pan, and the same zoom
+    /// RELATIVE to what now fits.
+    ///
+    /// <para><b>A resize is not a request to look at something else.</b> Only the shape of the window
+    /// changed, so the camera moves only as far as that shape forces it to — which, because a
+    /// perspective projection is specified vertically, is not at all while the viewport is at least
+    /// as wide as it is tall. A portrait window has a narrower horizontal field than a vertical one
+    /// and does force the camera back; scaling the distance by the ratio the fit changed by pushes it
+    /// exactly that far and no further, so a user who had zoomed in is still zoomed in by the same
+    /// amount afterwards.</para>
+    ///
+    /// <para>Scaling both ways rather than only outwards is what makes it reversible: narrow a window
+    /// and widen it again and the view is where it started, instead of having crept outwards a little
+    /// with every drag of the edge.</para>
     /// </summary>
     public void Resize(float aspect)
     {
         if (aspect <= 0f || !float.IsFinite(aspect)) return;
-        var narrowed = aspect < Aspect;
+
+        var previous = Aspect;
         Aspect = aspect;
+        if (_bounds.IsEmpty || previous <= 0f) return;
 
-        // Only a NARROWER viewport can newly clip the model, because a perspective projection is
-        // specified vertically: widening adds horizontal room, narrowing takes it away. Re-framing on
-        // every resize would undo the user's orbit each time they dragged a window edge.
-        if (!narrowed || _bounds.IsEmpty) return;
+        // What the model would need in each shape. These are equal whenever both are landscape, so
+        // the ordinary case of dragging a window edge moves the camera not at all.
+        var before = Camera.Frame(_bounds, Up, aspect: previous).Distance;
+        var after = Camera.Frame(_bounds, Up, aspect: aspect).Distance;
+        if (before <= 1e-6f || MathF.Abs(after - before) <= 1e-6f) return;
 
-        var offset = Camera.Position - Camera.Target;
-        var distance = offset.Length();
-        var needed = Camera.Frame(_bounds, Up, aspect: aspect).Distance;
-        if (needed > distance && distance > 1e-6f)
-            Camera = Camera.Zoom(needed / distance);
+        Camera = Camera.Zoom(after / before);
     }
 
     /// <summary>Rotate around the target. Deltas are fractions of the viewport — a drag of the full

@@ -96,6 +96,73 @@ public class ViewerTests
     }
 
     [Fact]
+    public void Resizing_the_window_does_not_undo_a_zoom()
+    {
+        // The bug this replaced: any narrowing at all — one pixel off the width — pushed a camera
+        // that was closer than the fit back out to the fit, so a user who had zoomed in lost it the
+        // moment they touched a window edge.
+        var controller = new OrbitController();
+        controller.Frame(Box(10), UpAxis.Z, aspect: 16f / 9f);
+        controller.Zoom(6f);
+        var zoomed = controller.Camera.Distance;
+
+        controller.Resize(4f / 3f);
+
+        Assert.Equal(zoomed, controller.Camera.Distance, 3);
+    }
+
+    [Fact]
+    public void A_zoom_survives_the_window_going_portrait()
+    {
+        // Portrait genuinely does force the camera back, and it should move exactly that far: still
+        // nearer than the framing distance afterwards, because the user asked to be nearer.
+        var bounds = Box(10);
+        var controller = new OrbitController();
+        controller.Frame(bounds, UpAxis.Z, aspect: 2f);
+        controller.Zoom(8f);
+        var zoomed = controller.Camera.Distance;
+
+        controller.Resize(0.5f);
+
+        var fitted = Camera.Frame(bounds, UpAxis.Z, aspect: 0.5f).Distance;
+        Assert.True(controller.Camera.Distance > zoomed, "portrait needs the camera further back");
+        Assert.True(controller.Camera.Distance < fitted,
+            "and not so far back that the zoom is gone: this is a resize, not a reframe");
+    }
+
+    [Fact]
+    public void Narrowing_a_window_and_widening_it_again_puts_the_view_back()
+    {
+        // Reversible, or a view creeps outwards a little with every drag of the edge.
+        var controller = new OrbitController();
+        controller.Frame(Box(10), UpAxis.Z, aspect: 1.6f);
+        controller.Zoom(4f);
+        var started = controller.Camera.Distance;
+
+        controller.Resize(0.45f);
+        controller.Resize(1.6f);
+
+        Assert.Equal(started, controller.Camera.Distance, 3);
+    }
+
+    [Fact]
+    public void Resizing_leaves_the_orbit_and_the_pan_where_they_were()
+    {
+        var controller = new OrbitController();
+        controller.Frame(Box(10), UpAxis.Z, aspect: 1.6f);
+        controller.Orbit(0.35f, 0.2f);
+        controller.Pan(0.1f, 0.05f);
+        var target = controller.Camera.Target;
+        var direction = Vector3.Normalize(controller.Camera.Position - controller.Camera.Target);
+
+        controller.Resize(0.5f);
+
+        Assert.Equal(target, controller.Camera.Target);
+        var after = Vector3.Normalize(controller.Camera.Position - controller.Camera.Target);
+        Assert.True(Vector3.Dot(direction, after) > 0.9999f, "a resize must not turn the camera");
+    }
+
+    [Fact]
     public void Reset_recovers_a_view_that_has_been_lost()
     {
         // Every viewer needs this, because every viewer's user eventually pans the model off screen
