@@ -48,6 +48,30 @@
       "cwd": "${workspaceFolder}/samples/Khalkos3D.DesktopDemo",
       "console": "integratedTerminal",
       "stopAtEntry": false
+    },
+    {
+      // NOT A DEBUG SESSION, and it cannot be: a wasm publish is a build, and what it proves is
+      // whether it succeeded. It is here because this dropdown is where people look for "run the
+      // thing", and a gate nobody can find is a gate nobody runs. The same commands are also under
+      // Tasks: Run Task, which is where a build belongs.
+      //
+      // node-terminal is VS Code's own way to run a command in a debug terminal — it comes with the
+      // editor, needs nothing installed, and does not care that the command is not JavaScript.
+      "name": "Browser gate: link for wasm (Mono)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      // The same probe with Mono's AOT compiler and LLVM switched on. Minutes rather than seconds,
+      // and it refuses things the interpreter is happy to run — which is the whole reason both modes
+      // are checked rather than just the one a browser app usually ships.
+      "name": "Browser gate: link for wasm (Mono + LLVM)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "dotnet publish tests/Khalkos3D.WasmProbe -c Release -p:RunAOTCompilation=true -p:WasmEnableLLVM=true",
+      "cwd": "${workspaceFolder}"
     }
   ],
   "inputs": [
